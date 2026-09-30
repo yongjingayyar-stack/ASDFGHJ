@@ -381,20 +381,29 @@ render = function () {
 
   const REMOVE_RX = /\b(remove|delete|disable|drop|get rid of|without)\b/;
 
-  /* palette swap across css/hud.css + game CFG.PAL.
+  /* palette swap across css/hud.css + inlined <style> in index.html + game CFG.PAL.
      `push` is analyze()'s per-path op accumulator. */
   function buildPalettePatch(t, push) {
     const col = colorFrom(t);
     if (!col) return false;
     const b = S.build;
     let touched = false;
+    const pal = (S.plan && S.plan.palette) || ['#35f2d7'];
+    const recolour = src => {
+      let s = src.split(pal[0]).join(col);
+      s = s.replace(/--accent\s*:\s*[^;]+;/, '--accent: ' + col + ';');
+      return s;
+    };
     const cssPath = findFile(/(^|\/)css\/hud\.css$/);
     if (cssPath) {
-      let css = b.files[cssPath];
-      const pal = (S.plan && S.plan.palette) || ['#35f2d7'];
-      css = css.split(pal[0]).join(col);
-      css = css.replace(/--accent\s*:\s*[^;]+;/, '--accent: ' + col + ';');
+      const css = recolour(b.files[cssPath]);
       if (css !== b.files[cssPath]) { push(cssPath, css, 'css: accent recoloured to ' + col); touched = true; }
+    }
+    /* new builds inline the HUD stylesheet inside index.html — recolour it too */
+    const htmlPath = findFile(/(^|\/)index\.html$/);
+    if (htmlPath) {
+      const html = recolour(b.files[htmlPath]);
+      if (html !== b.files[htmlPath]) { push(htmlPath, html, 'shell: inline HUD style recoloured to ' + col); touched = true; }
     }
     const jsPath = findFile(/(^|\/)js\/game\.js$/);
     if (jsPath) {
@@ -528,8 +537,8 @@ render = function () {
     }
 
     /* 3 · palette / theme colour */
-    if (/\bcolou?r(ed|our)?\b|\btheme\b|\bpalette\b|\bpastel\b/.test(t) && !neg) {
-      if (buildPalettePatch(t, pushOp)) { matchedAny = true; notes.push('palette recolour applied (css + runtime CFG.PAL)'); }
+    if (/\bcolou?r(ed|our)?\b|\btheme\b|\bpalette\b|\bpastel\b|\b(?:red|blue|green|yellow|purple|pink|orange|cyan|white|gold|magenta|teal|crimson|scarlet|indigo|violet|turquoise|emerald)\b|#[0-9a-f]{3,8}\b/i.test(t) && !neg) {
+      if (buildPalettePatch(t, pushOp)) { matchedAny = true; notes.push('palette recolour applied (css + inline shell style + runtime CFG.PAL)'); }
     }
 
     /* 4 · fps / resolution */
