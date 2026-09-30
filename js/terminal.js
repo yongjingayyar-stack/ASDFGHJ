@@ -27,6 +27,7 @@
     ['persona', 'show active system persona'],
     ['open', 'switch console to Preview tab'],
     ['download', 'package project as .zip'],
+    ['upload', 'load a project from disk (.zip / build.json / loose files) for adjustment'],
     ['clear', 'wipe the terminal']
   ];
 
@@ -256,7 +257,13 @@
     },
     open() { Arc.UI.go('preview'); return '→ preview'; },
     download() { Arc.UI.download(); return '→ packaging zip…'; },
-    generate(arg) { Arc.UI.generate((arg || '').replace(/^["']|["']$/g, '') || undefined); return '→ forge started'; }
+    generate(arg) { Arc.UI.generate((arg || '').replace(/^["']|["']$/g, '') || undefined); return '→ forge started'; },
+    upload() {
+      const inp = document.getElementById('uploadInput');
+      if (!inp) return 'error: upload input missing';
+      inp.click();
+      return '→ file picker opened — .zip / build.json / loose game files · parsed on-device';
+    }
   };
 
   function run(raw) {

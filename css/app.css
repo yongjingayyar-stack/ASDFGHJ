@@ -423,3 +423,26 @@
   .top-stats { margin-left: auto; }
   .stat-chip:first-child { display: none; }
 }
+
+/* ── topbar upload button ── */
+.btn-upload {
+  --btn-bg: rgba(53, 242, 215, .07);
+  padding: 7px 13px; font-size: 11px; letter-spacing: .1em;
+  border-color: var(--line-strong); color: var(--cyan);
+  box-shadow: inset 0 0 0 1px rgba(53, 242, 215, .06);
+}
+.btn-upload:hover { border-color: var(--cyan); box-shadow: 0 0 18px -6px rgba(53, 242, 215, .6); }
+.btn-upload svg { flex: none; }
+
+/* drag & drop ingestion highlight */
+.app.is-dragging::after {
+  content: "DROP PROJECT — .zip · build.json · game files";
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 15px; letter-spacing: .18em;
+  color: var(--cyan); text-transform: uppercase;
+  background: rgba(6, 10, 22, .78); backdrop-filter: blur(3px);
+  border: 2px dashed var(--cyan); border-radius: 14px; margin: 12px;
+  pointer-events: none;
+}
+@media (max-width: 1100px) { .btn-upload span { display: none; } .btn-upload { padding: 7px 9px; } }

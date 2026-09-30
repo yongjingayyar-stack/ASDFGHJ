@@ -343,6 +343,53 @@
     U.toast(all ? 'all patches reverted' : 'patch reverted', 'ok');
   }
 
+  /* ───────────────────────── UPLOAD / INGEST ───────────────────────── */
+  async function handleUpload(fileList) {
+    if (!fileList || !fileList.length) return;
+    S.setStatus('working', 'ingesting project');
+    U.logLine('head', '── PROJECT UPLOAD ──', 'SYS');
+    U.toolLive('files', true);
+    let result = null;
+    try {
+      result = await Arc.Upload.ingest(fileList, {
+        log: (k, m) => U.logLine(k, m),
+        toast: (m, k) => U.toast(m, k)
+      });
+    } catch (e) {
+      U.logLine('err', 'upload fault: ' + e.message);
+    }
+    U.toolLive('files', false);
+    if (!result) { S.setStatus('ready', 'idle'); return; }
+
+    /* analyze pass — planner scans the imported tree for structure */
+    U.toolLive('planner', true);
+    await sleep(260);
+    const langsTxt = (S.plan.langs || [S.plan.lang]).join(' + ');
+    U.logLine('plan', 'analyzed “' + result.label + '” · ' + result.count + ' file(s) · stack: ' + langsTxt);
+    U.logLine('plan', 'project mapped into virtual FS — adjustments can now target uploaded code');
+    U.toolLive('planner', false);
+
+    /* compiler validation gate on the imported build */
+    U.toolLive('compiler', true);
+    await sleep(240);
+    let res = null;
+    try { res = Arc.Compiler.compile(S.build.files, S.plan); }
+    catch (e) { U.logLine('err', 'compiler fault: ' + e.message); }
+    U.toolLive('compiler', false);
+    if (res) {
+      U.renderDiags(res.diags);
+      U.logLine(res.ok ? 'ok' : 'warn', 'upload compile · ' + res.stats.errors + ' errors · ' +
+        res.stats.warns + ' warnings · health ' + res.stats.score + '/100');
+    }
+
+    U.renderTree(); U.loadPreview(); S.save();
+    go('preview');
+    S.setStatus('ready', 'project loaded');
+    U.logLine('head', '── READY FOR ADJUSTMENTS ──', 'SYS');
+    U.toast('Project loaded — type an adjustment below', 'ok');
+    const ai = $('#adjustInput'); if (ai) { ai.focus(); ai.placeholder = 'Adjust this uploaded project… e.g. “make it pink, add a pause menu”'; }
+  }
+
   /* ───────────────────────── WIRING ───────────────────────── */
   function wire() {
     /* tabs */
@@ -368,6 +415,25 @@
     });
     $('#btnUndoPatch').onclick = () => revertPatch(false);
     $('#btnUndoAll').onclick = () => revertPatch(true);
+
+    /* upload — topbar button loads a project so adjustments can target it */
+    const upBtn = $('#btnUpload'), upIn = $('#uploadInput');
+    if (upBtn && upIn) {
+      upBtn.onclick = () => upIn.click();
+      upIn.addEventListener('change', () => { handleUpload(upIn.files); upIn.value = ''; });
+      /* drag & drop anywhere on the app shell also ingests a project */
+      const app = $('#app');
+      ['dragenter', 'dragover'].forEach(ev => app.addEventListener(ev, e => {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+        app.classList.add('is-dragging');
+      }));
+      ['dragleave', 'drop'].forEach(ev => app.addEventListener(ev, e => {
+        e.preventDefault();
+        if (ev === 'dragleave' && app.contains(e.relatedTarget)) return;
+        app.classList.remove('is-dragging');
+        if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files.length) handleUpload(e.dataTransfer.files);
+      }));
+    }
 
     /* preview */
     $('#btnReload').onclick = () => { U.loadPreview(); U.toast('runtime reloaded'); };
@@ -475,6 +541,7 @@
   Arc.UI.download = download;
   Arc.UI.adjust = adjust;
   Arc.UI.revertPatch = revertPatch;
+  Arc.UI.handleUpload = handleUpload;
 
   document.readyState === 'loading' ? addEventListener('DOMContentLoaded', init) : init();
 })();
