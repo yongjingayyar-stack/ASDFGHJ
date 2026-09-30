@@ -1,0 +1,344 @@
+/* ═══════════════════════════════════════════════════════════
+   ARCGEN · main.js — boot sequence + orchestration of the five
+   tools into one streamed build, preview wiring and packaging.
+   ═══════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  const S = Arc.State, U = Arc.UI;
+  const $ = U.$, $$ = U.$$;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ───────────────────────── BOOT ───────────────────────── */
+  const BOOT_LINES = [
+    ['mounting sandbox', 'isolated origin · no network egress'],
+    ['loading weights', 'arcgen-ttt-340b-q8 · 128 experts'],
+    ['verifying compute floor', '4192 TOPS ≥ 4000 TB/s minimum ✓'],
+    ['benchmark handshake', 'aggregate accuracy 91.4% ≥ 89% ✓'],
+    ['registering tools', 'planner · coder · files · terminal · compiler'],
+    ['baking system persona', 'root instruction layer locked'],
+    ['warming determinism lock', 'fixed timestep 1/60 · seeded RNG'],
+    ['console ready', 'ARCGEN online']
+  ];
+
+  async function boot() {
+    const log = $('#bootLog'), fill = $('#bootBarFill');
+    for (let i = 0; i < BOOT_LINES.length; i++) {
+      const [a, b] = BOOT_LINES[i];
+      const d = document.createElement('div');
+      d.innerHTML = '<b>[' + String(i + 1).padStart(2, '0') + ']</b> ' + a +
+                    ' <em>' + b + '</em>';
+      log.appendChild(d);
+      log.scrollTop = log.scrollHeight;
+      fill.style.width = ((i + 1) / BOOT_LINES.length * 100) + '%';
+      await sleep(190 + Math.random() * 130);
+    }
+    $('#bootEnter').hidden = false;
+  }
+
+  function leaveBoot() {
+    $('#boot').classList.add('is-out');
+    $('#app').hidden = false;
+    setTimeout(() => $('#boot').remove(), 700);
+    U.logLine('sys', 'ARCGEN cognitive stack initialised — fully independent, zero API surface.');
+    U.logLine('sys', 'spec floor verified: ' + S.SPEC.topsNominal + ' TOPS · ' + S.SPEC.accNominal + '% benchmark accuracy.');
+    U.logLine('plan', 'waiting for a game directive. Type one in the Forge, or press ◈ Surprise me.');
+  }
+
+  /* ───────────────────────── GENERATION RUN ───────────────────────── */
+  async function generate(forcedPrompt) {
+    if (S.running) return;
+    const prompt = (forcedPrompt != null ? forcedPrompt : $('#promptInput').value).trim();
+    if (!prompt) { U.toast('describe the game first', 'err'); $('#promptInput').focus(); return; }
+    if (forcedPrompt != null) $('#promptInput').value = prompt;
+
+    S.running = true;
+    S.setStatus('working', 'synthesising…');
+    $('#btnGenerate').disabled = true;
+    U.renderPipeline();
+    $$('#toolList li').forEach(li => li.classList.remove('is-ok', 'is-live'));
+    U.renderDiags(null);
+
+    const t0 = performance.now();
+    U.logLine('head', '── DIRECTIVE · "' + prompt + '" ──', 'SYS');
+
+    /* 1 · parse + plan (PLANNER) */
+    U.pipeSet('parse', 'run'); U.toolLive('planner', true);
+    await U.typeLine('plan', 'tokenising directive · extracting genre intent, numeric constraints and feel keywords');
+    U.pipeSet('parse', 'done'); U.pipeSet('plan', 'run');
+    await sleep(220);
+
+    const plan = Arc.Planner.plan(prompt, S.lang, S.persona);
+    S.plan = plan;
+    U.logLine('plan', 'genre → ' + plan.genre + ' (' + plan.genreLabel.tagline + ') · view ' + plan.view + ' · seed ' + (plan.seed >>> 0));
+    U.logLine('plan', 'title candidate: “' + plan.title + '” · palette ' + plan.palette.join(' '));
+    plan.pillars.forEach(p => U.logLine('plan', 'pillar · ' + p));
+    U.pipeSet('plan', 'done'); U.pipeSet('arch', 'run');
+    await sleep(200);
+    U.logLine('plan', 'module graph: ' + plan.systems.map(s => s.name).join(' → '));
+    U.logLine('plan', 'budget: ≤' + plan.budget.frameMs + 'ms/frame · ≤' + plan.budget.maxSprites + ' sprites · ≤' + plan.budget.bundleKb + 'KB source');
+    U.pipeSet('arch', 'done');
+
+    /* 2 · code synthesis (CODER EXECUTOR) */
+    U.pipeSet('code', 'run'); U.toolLive('planner', false); U.toolLive('coder', true);
+    await U.typeLine('code', 'streaming runtime · ' + plan.systems.length + ' systems · fixed timestep + seeded RNG + input map');
+    const narration = [
+      'emit js/game.js — state machine menu/play/pause/over',
+      'emit entity behaviours · collision narrowphase · wave spawner',
+      'emit fx layer — particles, screen shake, hit-stop, synth audio',
+      'persona check → juice coefficient ' + plan.influence.juice.toFixed(2) + ', prose output suppressed'
+    ];
+    for (const n of narration) { await sleep(150); U.logLine('code', n); }
+    U.pipeSet('code', 'done');
+
+    /* 3 · file generation (FILE GENERATOR) */
+    U.pipeSet('assets', 'run'); U.toolLive('coder', false); U.toolLive('files', true);
+    let files;
+    try { files = Arc.Generators.generate(plan, S.persona); }
+    catch (e) {
+      U.logLine('err', 'generator fault: ' + e.message);
+      finish(true); return;
+    }
+    const paths = Object.keys(files);
+    U.logLine('file', 'project tree → ' + paths.length + ' files · ' + (Object.values(files).reduce((n, t) => n + t.length, 0) / 1024).toFixed(1) + ' KB');
+    for (const p of paths.slice(0, 10)) { await sleep(45); U.logLine('file', 'wrote ' + p + '  (' + (files[p].length / 1024).toFixed(1) + ' KB)'); }
+    U.logLine('file', '+ ' + (paths.length - 10) + ' more (ports, shaders, data tables, tooling)');
+    U.pipeSet('assets', 'done');
+
+    /* 4 · terminal pass (TERMINAL EXECUTOR) */
+    U.pipeSet('compile', 'run'); U.toolLive('files', false); U.toolLive('terminal', true);
+    const build = {
+      name: plan.slug, title: plan.title, short: plan.title.split(' ')[0],
+      files, lang: plan.lang, seed: plan.seed >>> 0,
+      genreLabel: plan.genreLabel.tagline,
+      personaDigest: plan.personaDigest, createdAt: Date.now()
+    };
+    S.addBuild(build);
+    const termOut = $('#termOut');
+    for (const cmd of ['ls -l', 'wc --all', 'check js/game.js', 'test', 'build']) {
+      await sleep(180);
+      U.logLine('term', '$ ' + cmd);
+      Arc.Terminal.run(cmd);
+    }
+    U.pipeSet('compile', 'done');
+
+    /* 5 · compiler verdict (COMPILER) */
+    U.toolLive('terminal', false); U.toolLive('compiler', true);
+    await sleep(220);
+    const res = Arc.Compiler.compile(files, plan);
+    U.renderDiags(res.diags);
+    res.diags.filter(d => d.level === 'error').forEach(d => U.logLine('err', d.path + (d.line ? ':' + d.line : '') + ' ' + d.msg));
+    res.diags.filter(d => d.level === 'warn').slice(0, 4).forEach(d => U.logLine('warn', d.path + ' ' + d.msg));
+    if (res.repaired) U.logLine('comp', 'self-repair applied ' + res.repaired + ' patch(es), re-passed clean');
+    U.logLine(res.ok ? 'ok' : 'err',
+      'compile report · ' + res.stats.files + ' files · ' + res.stats.lines.toLocaleString() + ' lines · ' +
+      res.stats.errors + ' errors · ' + res.stats.warns + ' warnings · health ' + res.stats.score + '/100 · ' + res.stats.ms + ' ms');
+
+    U.pipeSet('ship', 'run');
+    await sleep(200);
+    U.pipeSet('ship', 'done');
+    U.toolLive('compiler', false);
+
+    /* 6 · hand off to preview */
+    U.loadPreview();
+    U.renderTree();
+    S.setStatus(res.ok ? 'ready' : 'error', res.ok ? 'build ready' : 'build has errors');
+    U.logLine('head', '── BUILD READY · ' + plan.title + ' ──', 'SYS');
+    U.logLine('ok', 'playable now in Preview · downloadable from Export · ' + ((performance.now() - t0) / 1000).toFixed(1) + 's total');
+    U.toast(res.ok ? 'Build ready — open Preview' : 'Build finished with errors', res.ok ? 'ok' : 'err');
+    if (res.ok) go('preview');
+    finish(false);
+  }
+
+  function finish(aborted) {
+    S.running = false;
+    $('#btnGenerate').disabled = !!aborted ? false : false;
+    if (!aborted) $('#btnGenerate').focus();
+  }
+
+  /* ───────────────────────── COMPILE BUTTON ───────────────────────── */
+  async function manualCompile() {
+    const b = S.build; if (!b || !S.plan) { U.toast('no build to compile', 'err'); return; }
+    U.toolLive('compiler', true);
+    S.setStatus('working', 'compiling');
+    await sleep(320);
+    const res = Arc.Compiler.compile(b.files, S.plan);
+    U.renderDiags(res.diags);
+    U.logLine(res.ok ? 'ok' : 'err', 'manual compile · ' + res.stats.errors + ' errors · ' + res.stats.warns + ' warnings · health ' + res.stats.score + '/100');
+    U.toolLive('compiler', false);
+    S.setStatus(res.ok ? 'ready' : 'error', 'compiled');
+    Arc.Terminal.run('compile ' + ($('.ctarget.is-on') || {}).textContent || 'web');
+  }
+
+  /* ───────────────────────── DOWNLOAD ───────────────────────── */
+  async function download() {
+    const b = S.build;
+    if (!b) { U.toast('generate a build first', 'err'); return; }
+    const btn = $('#btnDownload');
+    btn.disabled = true; btn.textContent = '⏳ packing…';
+    try {
+      let blob;
+      if (typeof JSZip === 'function') {
+        const zip = new JSZip();
+        const root = zip.folder(b.name);
+        Object.entries(b.files).forEach(([p, t]) => root.file(p, t));
+        root.file('BUILDSPEC.json', JSON.stringify({
+          generator: 'ARCGEN ' + S.SPEC.model, seed: b.seed, personaDigest: b.personaDigest,
+          spec: { tops: S.SPEC.topsMin + '+ TB/s', accuracy: S.SPEC.accMin + '+%' },
+          builtAt: new Date(b.createdAt).toISOString()
+        }, null, 2));
+        blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      } else {
+        /* graceful degradation: ship the playable single-file build */
+        const html = U.singleFileHTML(b);
+        blob = new Blob([html], { type: 'text/html' });
+        U.toast('zipper unavailable — exporting single-file HTML', 'err');
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = b.name + (typeof JSZip === 'function' ? '.zip' : '.html');
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      U.logLine('ok', 'packaged ' + a.download + ' (' + (blob.size / 1024).toFixed(1) + ' KB) — on-device, no upload');
+      U.toast('downloaded ' + a.download, 'ok');
+    } catch (e) {
+      U.logLine('err', 'packaging failed: ' + e.message);
+      U.toast('packaging failed', 'err');
+    }
+    btn.disabled = false; btn.textContent = '⬇ Download project (.zip)';
+  }
+
+  /* ───────────────────────── VIEW ROUTER ───────────────────────── */
+  function go(view) {
+    $$('.view').forEach(v => v.classList.toggle('is-active', v.id === 'view-' + view));
+    $$('.tab').forEach(t => t.classList.toggle('is-active', t.dataset.view === view));
+    if (view === 'preview') U.loadPreview();
+    if (view === 'bench') U.renderBench();
+    if (view === 'export') U.renderTree();
+    if (view === 'persona') U.renderPersona();
+  }
+
+  /* ───────────────────────── WIRING ───────────────────────── */
+  function wire() {
+    /* tabs */
+    $$('.tab').forEach(t => t.onclick = () => go(t.dataset.view));
+
+    /* forge */
+    $('#btnGenerate').onclick = () => generate();
+    $('#promptInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate();
+    });
+    $('#btnRandomize').onclick = () => {
+      const p = S.SAMPLES[Math.floor(Math.random() * S.SAMPLES.length)];
+      $('#promptInput').value = p;
+      U.logLine('sys', 'sample directive loaded: “' + p + '”');
+    };
+    $('#btnClearConsole').onclick = () => { $('#console').innerHTML = ''; U.logLine('sys', 'console cleared'); };
+
+    /* preview */
+    $('#btnReload').onclick = () => { U.loadPreview(); U.toast('runtime reloaded'); };
+    $('#viewportSel').onchange = () => U.applyViewport();
+    $('#btnFullscreen').onclick = () => {
+      const f = $('#gameFrame');
+      if (f.requestFullscreen) f.requestFullscreen();
+      else U.toast('fullscreen blocked by browser');
+    };
+
+    /* export */
+    $('#btnDownload').onclick = download;
+    $('#btnCopyFile').onclick = () => {
+      const b = S.build; if (!b || !S.activeFile) return;
+      const txt = b.files[S.activeFile];
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+        .then(() => U.toast('copied ' + S.activeFile, 'ok'))
+        .catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = txt; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); U.toast('copied ' + S.activeFile, 'ok'); }
+          catch (e) { U.toast('copy failed — select manually', 'err'); }
+          ta.remove();
+        });
+    };
+
+    /* compile */
+    $('#btnCompile').onclick = manualCompile;
+
+    /* persona */
+    const ta = $('#personaInput');
+    ta.addEventListener('input', () => { $('#personaCount').textContent = ta.value.length + ' chars'; });
+    $('#btnPersonaSave').onclick = async () => {
+      S.persona = ta.value; S.save(); U.renderPersona();
+      S.setStatus('working', 're-baking persona');
+      U.logLine('sys', 'persona re-bake → recomputing behaviour deltas');
+      await sleep(420);
+      const digest = 'sha1:' + (Arc.Planner.hashSeed(S.persona) >>> 0).toString(16);
+      U.logLine('ok', 'persona locked · digest ' + digest + ' · will apply to next build');
+      S.setStatus('ready', 'persona baked');
+      U.toast('persona re-baked', 'ok');
+    };
+    $('#btnPersonaReset').onclick = () => {
+      S.persona = Arc.State.PERSONA_PRESETS[0].text.replace(/\n\nOVERRIDE[\s\S]*$/, '');
+      ta.value = S.persona; S.save(); U.renderPersona(); U.toast('default persona restored');
+    };
+
+    /* terminal */
+    $('#termForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const inp = $('#termInput');
+      Arc.Terminal.run(inp.value);
+      inp.value = '';
+    });
+    $('#termInput').addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const v = e.target.value.trim().split(/\s+/)[0];
+        const hit = Object.keys(Arc.Terminal.CMD).find(k => k.startsWith(v));
+        if (hit) e.target.value = hit + ' ';
+      }
+    });
+
+    /* clock */
+    setInterval(() => {
+      $('#footClock').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    }, 1000);
+
+    /* status subscription */
+    S.subscribe(evt => { if (evt === 'status') U.syncStatus(); });
+
+    /* boot button */
+    $('#bootEnter').onclick = leaveBoot;
+    addEventListener('keydown', e => {
+      if (!$('#boot') && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+      if ($('#boot') && !$('#boot').classList.contains('is-out') && (e.key === 'Enter' || e.key === ' ')) {
+        if (!$('#bootEnter').hidden) { e.preventDefault(); leaveBoot(); }
+      }
+      /* global shortcuts */
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && $('#promptInput').value.trim()) generate();
+    });
+  }
+
+  /* ───────────────────────── INIT ───────────────────────── */
+  function init() {
+    S.load();
+    U.renderTools(); U.renderPipeline(); U.renderLangPicker(); U.renderQuickTags();
+    U.renderPersona(); U.renderPresets(); U.renderGuards(); U.renderCompileTargets();
+    U.renderBench(); U.renderTree(); U.syncStatus(); U.startTTT();
+    Arc.Terminal.CMD && (() => {
+      const el = $('#termOut');
+      const d = document.createElement('div');
+      d.className = 'dim';
+      d.textContent = 'arcgen shell · virtual filesystem over generated builds\ncommands: help ls cat tree wc grep check build test compile stats plan persona open download generate clear';
+      el.appendChild(d);
+    })();
+    if (S.builds.length) { U.loadPreview(); U.logLine('sys', 'restored ' + S.builds.length + ' cached build(s) from local storage.'); }
+    wire();
+    boot();
+  }
+
+  /* expose for terminal commands */
+  Arc.UI.go = go;
+  Arc.UI.generate = generate;
+  Arc.UI.download = download;
+
+  document.readyState === 'loading' ? addEventListener('DOMContentLoaded', init) : init();
+})();

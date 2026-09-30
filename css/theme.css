@@ -1,0 +1,170 @@
+/* ═══════════════════════════════════════════════════════════
+   ARCGEN · theme.css — design tokens, reset, primitives
+   Palette: deep obsidian + engineering cyan + plasma magenta
+   Type pairing: Space Grotesk (display) / JetBrains Mono (data)
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* surfaces */
+  --void:        #05070d;
+  --abyss:       #080b14;
+  --panel:       #0c1120;
+  --panel-2:     #101729;
+  --panel-3:     #16203a;
+  --line:        rgba(122, 162, 255, .13);
+  --line-strong: rgba(122, 162, 255, .28);
+
+  /* ink */
+  --ink:         #e8eefc;
+  --ink-dim:     #93a3c4;
+  --ink-faint:   #5d6b8c;
+
+  /* signals */
+  --cyan:        #35f2d7;
+  --cyan-deep:   #12b8a6;
+  --magenta:     #ff3d81;
+  --violet:      #8b6bff;
+  --amber:       #ffb547;
+  --lime:        #a8ff3e;
+
+  --accent:      var(--cyan);
+  --accent-soft: rgba(53, 242, 215, .12);
+  --danger:      #ff5c5c;
+  --ok:          #46e08a;
+
+  /* geometry */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 14px;
+  --rail-l: 300px;
+  --rail-r: 330px;
+  --topbar-h: 62px;
+  --status-h: 26px;
+
+  /* effects */
+  --glow-cyan: 0 0 0 1px rgba(53,242,215,.35), 0 0 22px rgba(53,242,215,.18);
+  --shadow-panel: 0 18px 40px -22px rgba(0,0,0,.9);
+  --scan: repeating-linear-gradient(0deg, rgba(255,255,255,.024) 0 1px, transparent 1px 3px);
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1100px 700px at 78% -12%, rgba(139,107,255,.16), transparent 60%),
+    radial-gradient(900px 620px at 6% 108%, rgba(53,242,215,.11), transparent 62%),
+    radial-gradient(700px 500px at 50% 50%, rgba(255,61,129,.05), transparent 70%),
+    var(--void);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* faint engineering grid over everything */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(122,162,255,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122,162,255,.045) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 40%, #000 30%, transparent 88%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+h1,h2,h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; }
+p { margin: 0; }
+ul, ol, dl { margin: 0; padding: 0; list-style: none; }
+button, input, textarea, select { font: inherit; color: inherit; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,.02); }
+::-webkit-scrollbar-thumb { background: rgba(122,162,255,.18); border-radius: 20px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(122,162,255,.34); }
+
+/* ────────── buttons ────────── */
+.btn {
+  --btn-bg: var(--panel-3);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--btn-bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: 500;
+  letter-spacing: .06em; text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease, opacity .2s;
+  position: relative; overflow: hidden;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .38; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  --btn-bg: linear-gradient(100deg, var(--cyan-deep), var(--cyan));
+  color: #031310; border-color: transparent; font-weight: 700;
+  box-shadow: 0 6px 22px -8px rgba(53,242,215,.6);
+}
+.btn-primary:hover { box-shadow: 0 10px 30px -8px rgba(53,242,215,.85); }
+.btn-primary .spark {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #031310; box-shadow: 0 0 0 3px rgba(3,19,16,.22);
+  animation: pulseDot 1.6s infinite;
+}
+.btn-ghost { --btn-bg: transparent; border-color: var(--line); color: var(--ink-dim); }
+.btn-ghost:hover { color: var(--ink); border-color: var(--line-strong); }
+.btn-outline { --btn-bg: transparent; border-color: var(--line-strong); }
+.btn-outline:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.btn-block { width: 100%; }
+
+.mini-btn {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-faint); border-radius: var(--r-sm);
+  font-family: var(--font-mono); font-size: 10.5px;
+  padding: 3px 9px; cursor: pointer; letter-spacing: .05em;
+  transition: .18s;
+}
+.mini-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ────────── chips / pills / tags ────────── */
+.pill {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+  padding: 3px 8px; border-radius: 20px;
+  border: 1px solid var(--line-strong); color: var(--ink-dim);
+  text-transform: uppercase; white-space: nowrap;
+}
+.pill-solid { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.tag {
+  font-family: var(--font-mono); font-size: 10px; padding: 2px 7px;
+  border-radius: var(--r-sm); background: var(--panel-3); color: var(--ink-dim);
+  border: 1px solid var(--line);
+}
+
+.spacer { flex: 1; }
+.sep { width: 1px; height: 12px; background: var(--line-strong); display: inline-block; }
+
+.fineprint {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint);
+  line-height: 1.6; margin-top: 8px;
+}
+
+@keyframes pulseDot { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+@keyframes blink { 50% { opacity: 0 } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes sweep { from { transform: translateX(-100%) } to { transform: translateX(320%) } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001s !important; transition-duration: .001s !important; }
+}

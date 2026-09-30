@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARCGEN // Autonomous Game Engine Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/theme.css" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+<!-- ══════════════════════ BOOT SEQUENCE ══════════════════════ -->
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-mark">
+      <svg viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">
+        <polygon points="32,4 58,19 58,45 32,60 6,45 6,19" fill="none" stroke="currentColor" stroke-width="2"/>
+        <polygon points="32,16 47,24.5 47,39.5 32,48 17,39.5 17,24.5" fill="none" stroke="currentColor" stroke-width="1" opacity=".55"/>
+        <circle cx="32" cy="32" r="4" fill="currentColor"/>
+      </svg>
+    </div>
+    <h1 class="boot-title">ARCGEN<span>_ENGINE_AGENT</span></h1>
+    <div class="boot-log" id="bootLog"></div>
+    <div class="boot-bar"><i id="bootBarFill"></i></div>
+    <button id="bootEnter" class="btn btn-primary boot-enter" hidden>INITIALIZE CONSOLE</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ APP SHELL ══════════════════════ -->
+<div id="app" class="app" hidden>
+
+  <!-- ───────── TOP BAR ───────── -->
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true" class="brand-mark">
+        <polygon points="32,4 58,19 58,45 32,60 6,45 6,19" fill="none" stroke="currentColor" stroke-width="3"/>
+        <circle cx="32" cy="32" r="5" fill="currentColor"/>
+      </svg>
+      <div class="brand-txt">
+        <strong>ARCGEN</strong>
+        <em>v3.1 · game-dev cognitive stack</em>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-view="forge" role="tab"><span>01</span>Forge</button>
+      <button class="tab" data-view="preview" role="tab"><span>02</span>Preview</button>
+      <button class="tab" data-view="export" role="tab"><span>03</span>Export</button>
+      <button class="tab" data-view="persona" role="tab"><span>04</span>Persona</button>
+      <button class="tab" data-view="bench" role="tab"><span>05</span>Bench</button>
+    </nav>
+
+    <div class="top-stats">
+      <div class="stat-chip" title="Terra Operations Per Second (on-device inference)">
+        <label>TOPS</label><b id="chipTops">4192</b><i>TB/s</i>
+      </div>
+      <div class="stat-chip" title="Aggregate benchmark accuracy">
+        <label>ACCURACY</label><b id="chipAcc">91.4</b><i>%</i>
+      </div>
+      <div class="status-orb" id="statusOrb" data-state="idle"><i></i><span>IDLE</span></div>
+    </div>
+  </header>
+
+  <!-- ───────── MAIN GRID ───────── -->
+  <main class="workspace">
+
+    <!-- LEFT RAIL : TOOLS + TTT MODEL -->
+    <aside class="rail rail-left">
+      <section class="panel">
+        <h2 class="panel-h">Toolchain <small>5 agents</small></h2>
+        <ul class="tool-list" id="toolList"></ul>
+      </section>
+
+      <section class="panel panel-grow">
+        <h2 class="panel-h">TTT Model <small>test-time training</small></h2>
+        <div class="ttt-viz">
+          <canvas id="tttCanvas" width="288" height="150"></canvas>
+        </div>
+        <dl class="kv-grid">
+          <div><dt>Architecture</dt><dd>Mixture-of-Experts · 340B</dd></div>
+          <div><dt>Context</dt><dd>1M tokens</dd></div>
+          <div><dt>Adaptation</dt><dd>online / per-task</dd></div>
+          <div><dt>Compute</dt><dd id="tttCompute">—</dd></div>
+        </dl>
+        <div class="meters">
+          <div class="meter"><label>Specialist routing</label><i style="--v:78%"></i></div>
+          <div class="meter"><label>Self-repair depth</label><i style="--v:64%"></i></div>
+          <div class="meter"><label>Determinism lock</label><i style="--v:96%"></i></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-h">Runtime</h2>
+        <div class="runtime-row">
+          <span class="pill pill-solid">FULLY OFFLINE</span>
+          <span class="pill">NO API CALLS</span>
+          <span class="pill">LOCAL WEIGHTS</span>
+        </div>
+        <p class="fineprint">All planning, synthesis and compilation execute inside the isolated browser sandbox. Zero network egress after asset load.</p>
+      </section>
+    </aside>
+
+    <!-- CENTER : VIEWS -->
+    <section class="stage">
+
+      <!-- ══ VIEW: FORGE ══ -->
+      <article class="view is-active" id="view-forge">
+        <div class="prompt-dock">
+          <div class="prompt-head">
+            <h2>Game Directive</h2>
+            <div class="lang-picker" id="langPicker"></div>
+          </div>
+          <textarea id="promptInput" class="prompt-input" rows="3" spellcheck="false"
+            placeholder="Describe the game… e.g. “neon top-down racer with drifting, 3 laps, ghost times”"></textarea>
+          <div class="prompt-foot">
+            <div class="quick-tags" id="quickTags"></div>
+            <div class="prompt-actions">
+              <button class="btn btn-ghost" id="btnRandomize">◈ Surprise me</button>
+              <button class="btn btn-primary" id="btnGenerate">
+                <i class="spark"></i> Generate build
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="console-wrap">
+          <div class="console-head">
+            <span class="dotrow"><i></i><i></i><i></i></span>
+            <b>agent_stream</b>
+            <span class="crumbs" id="runCrumbs">awaiting directive</span>
+            <span class="spacer"></span>
+            <button class="mini-btn" id="btnClearConsole">clear</button>
+          </div>
+          <div class="console" id="console"></div>
+        </div>
+      </article>
+
+      <!-- ══ VIEW: PREVIEW ══ -->
+      <article class="view" id="view-preview">
+        <div class="preview-bar">
+          <div class="preview-meta">
+            <b id="previewTitle">no build loaded</b>
+            <span id="previewSub">—</span>
+          </div>
+          <div class="preview-tools">
+            <button class="mini-btn" id="btnReload">↻ reload</button>
+            <button class="mini-btn" id="btnFullscreen">⤢ fullscreen</button>
+            <select class="sel" id="viewportSel">
+              <option value="960x540">960 × 540</option>
+              <option value="800x600">800 × 600</option>
+              <option value="640x360">640 × 360</option>
+              <option value="390x844">390 × 844 (mobile)</option>
+            </select>
+          </div>
+        </div>
+        <div class="screen-frame" id="screenFrame">
+          <div class="screen-empty" id="screenEmpty">
+            <svg viewBox="0 0 64 64" width="56" height="56"><rect x="6" y="12" width="52" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 46v6M40 46v6M18 52h28" stroke="currentColor" stroke-width="2"/></svg>
+            <p>Generate a build in <b>Forge</b> to preview it here — playable immediately.</p>
+          </div>
+          <iframe id="gameFrame" class="game-frame" title="Game preview" sandbox="allow-scripts allow-pointer-lock" allow="fullscreen"></iframe>
+        </div>
+        <div class="hud-strip">
+          <div class="hud"><label>FPS</label><b id="hudFps">—</b></div>
+          <div class="hud"><label>FRAME</label><b id="hudMs">—</b></div>
+          <div class="hud"><label>SPRITES</label><b id="hudSprites">—</b></div>
+          <div class="hud"><label>INPUT</label><b id="hudInput">keyboard</b></div>
+          <canvas id="fpsGraph" width="220" height="34"></canvas>
+        </div>
+      </article>
+
+      <!-- ══ VIEW: EXPORT ══ -->
+      <article class="view" id="view-export">
+        <div class="split">
+          <div class="split-main">
+            <div class="file-head">
+              <h2>Project files</h2>
+              <div class="seg" id="buildTabs"></div>
+            </div>
+            <div class="file-tree" id="fileTree"></div>
+          </div>
+          <div class="split-side">
+            <div class="editor">
+              <div class="editor-bar">
+                <span id="editorPath">—</span>
+                <span class="spacer"></span>
+                <span class="tag" id="editorLang">—</span>
+                <button class="mini-btn" id="btnCopyFile">copy</button>
+              </div>
+              <pre class="code"><code id="editorCode"></code></pre>
+            </div>
+            <div class="export-box">
+              <h3>Package &amp; ship</h3>
+              <div class="export-rows" id="exportRows"></div>
+              <button class="btn btn-primary btn-block" id="btnDownload" disabled>
+                ⬇ Download project (.zip)
+              </button>
+              <p class="fineprint">ZIP assembled on-device via bundled JSZip — no upload, no server.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- ══ VIEW: PERSONA ══ -->
+      <article class="view" id="view-persona">
+        <div class="persona-grid">
+          <div class="persona-editor">
+            <h2>System Persona Prompt</h2>
+            <p class="lede">The persona is injected as the root instruction layer for every planner, coder, generator and compiler pass. Edit freely — the agent re-bakes its behaviour weights on save.</p>
+            <textarea id="personaInput" class="prompt-input persona-input" rows="14" spellcheck="false"></textarea>
+            <div class="persona-actions">
+              <button class="btn btn-ghost" id="btnPersonaReset">restore default</button>
+              <span class="char-count" id="personaCount">0 chars</span>
+              <button class="btn btn-primary" id="btnPersonaSave">◆ Re-bake persona</button>
+            </div>
+          </div>
+          <div class="persona-side">
+            <div class="panel">
+              <h2 class="panel-h">Persona presets</h2>
+              <div class="preset-list" id="personaPresets"></div>
+            </div>
+            <div class="panel">
+              <h2 class="panel-h">Behaviour deltas</h2>
+              <ul class="delta-list" id="personaDeltas"></ul>
+            </div>
+            <div class="panel">
+              <h2 class="panel-h">Guardrails</h2>
+              <div class="switches" id="guardSwitches"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- ══ VIEW: BENCH ══ -->
+      <article class="view" id="view-bench">
+        <div class="bench-hero">
+          <div class="gauge-card">
+            <canvas id="gaugeTops" width="240" height="150"></canvas>
+            <div class="gauge-cap"><b id="topsBig">4192</b><label>TOPS · terra ops / sec</label></div>
+            <p class="spec-line">minimum spec <b>4000 TB</b> · headroom <span id="topsHead">+192</span></p>
+          </div>
+          <div class="gauge-card">
+            <canvas id="gaugeAcc" width="240" height="150"></canvas>
+            <div class="gauge-cap"><b id="accBig">91.4%</b><label>benchmark accuracy</label></div>
+            <p class="spec-line">minimum spec <b>89%</b> · margin <span id="accHead">+2.4pt</span></p>
+          </div>
+          <div class="bench-radar">
+            <canvas id="radarCanvas" width="300" height="230"></canvas>
+            <div class="radar-legend" id="radarLegend"></div>
+          </div>
+        </div>
+        <div class="bench-table-wrap">
+          <h2>Capability matrix <small>verified suites</small></h2>
+          <table class="bench-table">
+            <thead><tr><th>Suite</th><th>Domain</th><th>Score</th><th>Δ vs min</th><th>Verified</th></tr></thead>
+            <tbody id="benchBody"></tbody>
+          </table>
+        </div>
+        <div class="bench-langs">
+          <h2>Language library <small>native codegen targets</small></h2>
+          <div class="lang-grid" id="langGrid"></div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- RIGHT RAIL : PIPELINE + TERMINAL + COMPILE -->
+    <aside class="rail rail-right">
+      <section class="panel">
+        <h2 class="panel-h">Pipeline <small id="pipePct">0%</small></h2>
+        <ol class="pipe" id="pipeList"></ol>
+      </section>
+
+      <section class="panel panel-grow">
+        <h2 class="panel-h">Terminal <small>arcgen@local</small></h2>
+        <div class="term" id="term">
+          <div class="term-out" id="termOut"></div>
+          <form class="term-form" id="termForm">
+            <span class="term-prompt">arcgen:~ $</span>
+            <input id="termInput" autocomplete="off" spellcheck="false" placeholder="help" />
+          </form>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-h">Compiler</h2>
+        <div class="compile-targets" id="compileTargets"></div>
+        <button class="btn btn-outline btn-block" id="btnCompile" disabled>▲ Run compile pass</button>
+        <div class="diag" id="diagBox"><em>no diagnostics</em></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>ARCGEN cognitive stack · sandboxed local runtime</span>
+    <span class="sep"></span>
+    <span id="footModel">model: arcgen-ttt-340b-q8</span>
+    <span class="sep"></span>
+    <span id="footTask">task: idle</span>
+    <span class="spacer"></span>
+    <span id="footClock">--:--:--</span>
+  </footer>
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="js/state.js"></script>
+<script src="js/planner.js"></script>
+<script src="js/generators.js"></script>
+<script src="js/compiler.js"></script>
+<script src="js/terminal.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
