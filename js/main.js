@@ -239,6 +239,110 @@
     if (view === 'persona') U.renderPersona();
   }
 
+  /* ─────────────────── ITERATIVE MODIFICATION STACK ───────────────────
+     The AI adjusts the game it already generated: natural-language
+     directive → planner intent parse → coder surgical patches →
+     files updated in tree → terminal logs → compiler validation gate.
+     On compile failure the patch set auto-reverts (transactional). */
+  async function adjust(text) {
+    const b = S.build;
+    if (!b || !S.plan) { U.toast('generate a build first — nothing to modify', 'err'); return false; }
+    text = (text || '').trim();
+    if (!text) { U.toast('type an adjustment, e.g. “make the player faster”', 'err'); return false; }
+    if (S.running) { U.toast('agent busy — wait for the current run', 'err'); return false; }
+
+    const btn = $('#btnAdjust');
+    if (btn) btn.disabled = true;
+    S.setStatus('working', 'modifying');
+    U.toolLive('planner', true);
+    U.logLine('head', '── ADJUSTMENT REQUEST ──', 'SYS');
+    U.logLine('sys', 'directive: “' + text + '”');
+    await sleep(160);
+
+    let an;
+    try { an = Arc.Patches.analyze(text); }
+    catch (e) { an = null; U.logLine('err', 'intent parser fault: ' + e.message); }
+    U.toolLive('planner', false);
+
+    if (!an || !an.matched || !an.ops || !an.ops.length) {
+      U.logLine('warn', 'no recognized adjustment in that directive — try feature words (double jump, dash, pause menu…), knobs (faster, fire rate, waves…) or colours');
+      U.toast('adjustment not recognized', 'err');
+      S.setStatus('ready', 'idle');
+      if (btn) btn.disabled = false;
+      return false;
+    }
+
+    U.logLine('plan', 'intent → ' + an.ops.length + ' patch op(s) over ' +
+      [...new Set(an.ops.map(o => o.path))].join(', '));
+    U.toolLive('coder', true);
+    await sleep(200);
+
+    let applied = null;
+    try { applied = Arc.Patches.apply(an); }
+    catch (e) { U.logLine('err', 'coder fault during apply: ' + e.message); }
+    U.toolLive('coder', false);
+    if (!applied || !applied.ok) {
+      U.logLine('err', 'apply failed: ' + ((applied && applied.error) || 'unknown'));
+      U.toast('patch could not be applied', 'err');
+      S.setStatus('ready', 'idle');
+      if (btn) btn.disabled = false;
+      return false;
+    }
+    (applied.changed || []).forEach(p => U.logLine('file', 'modified ' + p));
+
+    /* terminal pass — virtual fs write log */
+    U.toolLive('terminal', true);
+    U.logLine('term', '$ arcgen fs commit --paths ' + [...new Set(an.ops.map(o => o.path))].join(','));
+    await sleep(140);
+    U.toolLive('terminal', false);
+
+    /* compiler validation gate */
+    U.toolLive('compiler', true);
+    await sleep(220);
+    let res = null;
+    try { res = Arc.Compiler.compile(S.build.files, S.plan); }
+    catch (e) { U.logLine('err', 'compiler fault: ' + e.message); }
+    U.toolLive('compiler', false);
+
+    if (res && res.ok) {
+      U.renderDiags(res.diags);
+      U.logLine(res.ok ? 'ok' : 'err', 'post-patch compile · ' + res.stats.errors + ' errors · ' +
+        res.stats.warns + ' warnings · health ' + res.stats.score + '/100');
+      U.loadPreview();
+      U.renderTree();
+      S.save();
+      S.setStatus('ready', 'modified');
+      U.logLine('head', '── PATCH APPLIED ──', 'SYS');
+      U.toast('Game modified — preview updated', 'ok');
+      if (btn) btn.disabled = false;
+      return true;
+    }
+
+    /* gate rejected → transactional revert */
+    U.logLine('err', 'compiler rejected the patched build — reverting automatically');
+    if (res) { U.renderDiags(res.diags); res.diags.filter(d => d.level === 'error').slice(0, 4)
+      .forEach(d => U.logLine('err', d.path + (d.line ? ':' + d.line : '') + ' ' + d.msg)); }
+    try { Arc.Patches.undo(); } catch (e) { U.logLine('err', 'revert fault: ' + e.message); }
+    U.loadPreview(); U.renderTree(); S.save();
+    S.setStatus('ready', 'reverted');
+    U.toast('patch reverted — build unchanged', 'err');
+    if (btn) btn.disabled = false;
+    return false;
+  }
+
+  async function revertPatch(all) {
+    if (!Arc.Patches.hasHistory()) { U.toast('nothing to revert', 'err'); return; }
+    const n = all ? Arc.Patches.undoAll() : Arc.Patches.undo();
+    if (!n) { U.toast('nothing to revert', 'err'); return; }
+    U.logLine('sys', (all ? 'reverted ALL patch sets (' : 'reverted last patch set (') + n + ' change(s))');
+    if (S.build && S.plan) {
+      const res = Arc.Compiler.compile(S.build.files, S.plan);
+      U.renderDiags(res.diags);
+    }
+    U.loadPreview(); U.renderTree(); S.save();
+    U.toast(all ? 'all patches reverted' : 'patch reverted', 'ok');
+  }
+
   /* ───────────────────────── WIRING ───────────────────────── */
   function wire() {
     /* tabs */
@@ -255,6 +359,15 @@
       U.logLine('sys', 'sample directive loaded: “' + p + '”');
     };
     $('#btnClearConsole').onclick = () => { $('#console').innerHTML = ''; U.logLine('sys', 'console cleared'); };
+
+    /* adjustment stack (modify the generated game) */
+    const ai = $('#adjustInput');
+    $('#btnAdjust').onclick = () => { adjust(ai.value); };
+    ai.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); adjust(ai.value).then(ok => { if (ok) ai.value = ''; }); }
+    });
+    $('#btnUndoPatch').onclick = () => revertPatch(false);
+    $('#btnUndoAll').onclick = () => revertPatch(true);
 
     /* preview */
     $('#btnReload').onclick = () => { U.loadPreview(); U.toast('runtime reloaded'); };
@@ -360,6 +473,8 @@
   Arc.UI.go = go;
   Arc.UI.generate = generate;
   Arc.UI.download = download;
+  Arc.UI.adjust = adjust;
+  Arc.UI.revertPatch = revertPatch;
 
   document.readyState === 'loading' ? addEventListener('DOMContentLoaded', init) : init();
 })();

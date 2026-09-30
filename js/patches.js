@@ -636,6 +636,12 @@ render = function () {
     return n;
   }
 
+  /* True when the active build has at least one revertible patch snapshot. */
+  function hasHistory() {
+    const b = S.build;
+    return !!(b && Array.isArray(b.history) && b.history.length);
+  }
+
   global.Arc = global.Arc || {};
-  global.Arc.Patches = { analyze, apply, undo, undoAll, FEATURES, KNOBS };
+  global.Arc.Patches = { analyze, apply, undo, undoAll, hasHistory, FEATURES, KNOBS };
 })(window);

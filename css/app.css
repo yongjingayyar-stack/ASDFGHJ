@@ -178,6 +178,18 @@
 .prompt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .prompt-input::placeholder { color: #3c4a68; }
 
+/* adjustment dock — iterative modification of the generated game */
+.adjust-dock { display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.adjust-input {
+  flex: 1 1 260px; min-width: 0;
+  background: #070b14; border: 1px dashed var(--line-strong); border-radius: var(--r-md);
+  padding: 9px 12px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--ink); outline: none; transition: .2s;
+}
+.adjust-input:focus { border-style: solid; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(53,242,215,.14); }
+.adjust-input::placeholder { color: #3c4a68; }
+.btn-sm { padding: 8px 14px; font-size: 12px; }
+
 .prompt-foot { display: flex; align-items: center; gap: 14px; margin-top: 11px; flex-wrap: wrap; }
 .quick-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .qtag {

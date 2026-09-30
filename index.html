@@ -115,6 +115,13 @@
           </div>
           <textarea id="promptInput" class="prompt-input" rows="3" spellcheck="false"
             placeholder="Describe the game… e.g. “neon top-down racer with drifting, 3 laps, ghost times”"></textarea>
+          <div class="adjust-dock">
+            <input id="adjustInput" class="adjust-input" type="text" spellcheck="false" autocomplete="off"
+              placeholder="Adjust the generated game… e.g. “make the player faster, add a double jump”" />
+            <button class="btn btn-ghost btn-sm" id="btnAdjust" title="Apply modification to the current build">⚡ Modify</button>
+            <button class="mini-btn" id="btnUndoPatch" title="Revert the last applied patch set">↩ revert</button>
+            <button class="mini-btn" id="btnUndoAll" title="Revert every applied patch">revert all</button>
+          </div>
           <div class="prompt-foot">
             <div class="quick-tags" id="quickTags"></div>
             <div class="prompt-actions">
@@ -312,6 +319,7 @@
 <script src="js/planner.js"></script>
 <script src="js/generators.js"></script>
 <script src="js/compiler.js"></script>
+<script src="js/patches.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>

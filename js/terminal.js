@@ -20,6 +20,8 @@
     ['test', 'run tools/selftest.js contract checks'],
     ['compile <target>', 'web | unity | unreal | godot | libgdx | wasm'],
     ['lang [add|rm] <id…>', 'show / edit the multi-language stack (js cs cpp java py glsl gd rs lua html css json)'],
+    ['patch <directive…>', 'modify the generated game (e.g. patch make the player faster, add a double jump)'],
+    ['revert [--all]', 'undo last applied patch set (or every patch)'],
     ['stats', 'model TOPS / accuracy / token burn for this session'],
     ['plan', 'dump current design plan as JSON'],
     ['persona', 'show active system persona'],
@@ -238,6 +240,20 @@
         '\nedit with: lang add cpp py | lang rm java | lang cs py lua';
     },
     clear() { document.getElementById('termOut').innerHTML = ''; return null; },
+    patch(args) {
+      const text = args.join(' ').trim();
+      if (!text) return 'usage: patch <directive>  — e.g. `patch make the player faster and add a double jump`';
+      if (!Arc.State.build || !Arc.State.plan) return 'error: no build loaded — generate a game first';
+      if (Arc.UI.adjust) { Arc.UI.adjust(text); return '→ adjustment queued through the modification stack (planner → coder → compiler gate)'; }
+      return 'error: adjustment stack unavailable';
+    },
+    revert(args) {
+      if (!Arc.Patches || !Arc.Patches.hasHistory()) return 'revert: nothing to revert — no patches applied on this build';
+      const all = args.includes('--all') || args.includes('-a');
+      if (Arc.UI.revertPatch) { Arc.UI.revertPatch(all); return '→ reverting ' + (all ? 'ALL' : 'last') + ' patch set(s)…'; }
+      const n = all ? Arc.Patches.undoAll() : (Arc.Patches.undo() ? 1 : 0);
+      return 'reverted ' + n + ' change(s) · compile state restored';
+    },
     open() { Arc.UI.go('preview'); return '→ preview'; },
     download() { Arc.UI.download(); return '→ packaging zip…'; },
     generate(arg) { Arc.UI.generate((arg || '').replace(/^["']|["']$/g, '') || undefined); return '→ forge started'; }
