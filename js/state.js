@@ -120,6 +120,7 @@ gdd.md → architecture.json → src/** → assets/** → build report`;
     persona: DEFAULT_PERSONA,
     guards: { noNetwork: true, noEval: true, fixedTimestep: true, bundleLimit: false },
     lang: 'js',
+    langs: ['js'],          // multi-language stack (primary first)
     prompt: '',
     plan: null,
     builds: [],          // [{id,name,files:{path:text},lang,createdAt}]
@@ -136,7 +137,7 @@ gdd.md → architecture.json → src/** → assets/** → build report`;
     save() {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
-          persona: this.persona, guards: this.guards, lang: this.lang,
+          persona: this.persona, guards: this.guards, lang: this.lang, langs: this.langs,
           builds: this.builds.slice(-4), activeBuild: Math.max(-1, this.activeBuild - (this.builds.length - Math.min(4, this.builds.length)))
         }));
       } catch (e) { /* storage unavailable — non fatal */ }
@@ -149,6 +150,7 @@ gdd.md → architecture.json → src/** → assets/** → build report`;
         if (typeof d.persona === 'string' && d.persona.trim()) this.persona = d.persona;
         if (d.guards) Object.assign(this.guards, d.guards);
         if (d.lang) this.lang = d.lang;
+        if (Array.isArray(d.langs) && d.langs.length) this.langs = d.langs;
         if (Array.isArray(d.builds)) { this.builds = d.builds; this.activeBuild = d.builds.length ? (d.activeBuild ?? d.builds.length - 1) : -1; }
       } catch (e) { /* ignore corrupt state */ }
     },
