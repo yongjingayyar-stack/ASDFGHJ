@@ -319,7 +319,11 @@
         if (path.endsWith('.html')) {
           if (!/<canvas id="game"/.test(raw)) diags.push({ level: 'error', path, line: 0, msg: 'mount node #game missing' });
           if (!/<script src="js\/game.js">/.test(raw)) diags.push({ level: 'error', path, line: 0, msg: 'runtime script tag missing' });
-          if (!/<link rel="stylesheet" href="css\/hud.css">/.test(raw)) diags.push({ level: 'warn', path, line: 0, msg: 'HUD stylesheet not linked' });
+          /* HUD styling may be a linked css/hud.css OR inlined <style> —
+             both are valid; only warn when the shell has no styling at all. */
+          const hasLink   = /<link[^>]+href=["']css\/hud\.css["'][^>]*>/.test(raw);
+          const hasInline = /<style[\s>][\s\S]*?\.hud\b/.test(raw);
+          if (!hasLink && !hasInline) diags.push({ level: 'warn', path, line: 0, msg: 'HUD stylesheet missing (no link or inline <style>)' });
         }
       }
 
