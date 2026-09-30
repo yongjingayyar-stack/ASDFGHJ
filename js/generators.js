@@ -1811,7 +1811,7 @@ compile:native:
     json: p => ({ 'data/tables.json': genTables(p), 'architecture.json': genArchJSON(p) }),
     cs:   p => ({ 'ports/unity/PlayerController.cs': genUnityCS(p), 'ports/unity/project.meta': genUnityMeta(p) }),
     cpp:  p => ({ 'ports/unreal/UfoPawn.cpp': genUnrealCPP(p), 'native/main.cpp': genNativeMain(p), 'native/CMakeLists.txt': genCMake(p) }),
-    java: p => ({ 'ports/libgdx/' + className(p.title) + '.java': genJava(p), 'java/ArcGen.java': genJavaHarness(p) }),
+    java: p => { const o = {}; o['ports/libgdx/' + className(p.title) + '.java'] = genJava(p); o['java/ArcGen.java'] = genJavaHarness(p); return o; },
     py:   p => ({ 'ports/pygame/main.py': genPython(p), 'tools/tuning_tool.py': genPyTool(p) }),
     gd:   p => ({ 'ports/godot/player.gd': genGDScript(p), 'ports/godot/project.godot': genGodotProject(p) }),
     rs:   p => ({ 'ports/rust/src/lib.rs': genRust(p), 'rust/Cargo.toml': genCargoToml(p) }),
