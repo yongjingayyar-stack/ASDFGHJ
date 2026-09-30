@@ -24,135 +24,246 @@
     { id: 'persistence',    test: s => /localStorage/, msg: 'high-score persistence missing' }
   ];
 
-  /* ── language-aware comment/string grammar for the scanner ── */
-  const LINE_MARK = {
-    js: ['//'], cline: ['//'], py: ['#'], sh: ['#'], gd: ['#'], lua: ['--'],
-    html: [], css: [], json: [], text: []
+  /* ─────────────────────────────────────────────────────────────
+     LANGUAGE PROFILES — one grammar per family so the structural
+     pass never mistakes prose, Make variables or shader syntax for
+     code delimiters.
+       marks : line-comment openers ('#' alone also opens a line in
+               hash-line languages, e.g. Makefile / shell)
+       blocks: block-comment pairs
+       str   : string quote characters
+       triple: multi-line quote pairs (python)
+       regex : scan /…/flags literals (JS family only)
+       tpl   : `…${expr}…` template literals (JS only)
+       tag   : HTML tag markup carries attribute quotes
+     ───────────────────────────────────────────────────────────── */
+  const LANGS = {
+    js:   { marks: ['//'], blocks: [['/*', '*/']], str: ['"', "'", '`'], triple: [], regex: true, tpl: true },
+    cline:{ marks: ['//'], blocks: [['/*', '*/']], str: ['"', "'"],      triple: [], regex: false },
+    css:  { marks: [],     blocks: [['/*', '*/']], str: ['"', "'"],      triple: [] },
+    py:   { marks: ['#'],  blocks: [],             str: ['"', "'"],
+            triple: [['"""', '"""'], ["'''", "'''"]] },
+    sh:   { marks: ['#'],  blocks: [],             str: ['"', "'", '`'] },
+    gd:   { marks: ['#'],  blocks: [],             str: ['"', "'"] },
+    lua:  { marks: ['--'], blocks: [['--[[', ']]']],str: ['"', "'"] },
+    html: { marks: [],     blocks: [['<!--', '-->']], str: ['"', "'"], tag: true },
+    json: { marks: [],     blocks: [],             str: ['"'] },
+    text: { marks: [],     blocks: [],             str: [] },
+    make: { marks: [],     blocks: [],             str: ['"', "'"] }
   };
 
-  /* returns index just past a regex literal starting at i, or -1 if it looks
-     like a division operator instead. Heuristic: no newline before terminator,
-     body has no unescaped spaces unless escaped, and terminator is followed by
-     a flag/operand-ish char. */
+  function langFor(path) {
+    const p = String(path || '').toLowerCase();
+    if (/\.html?$/.test(p) || /\.(htm|vue)$/.test(p)) return 'html';
+    if (/\.css$/.test(p)) return 'css';
+    if (/\.(json|webmanifest)$/.test(p)) return 'json';
+    if (/\.py$/.test(p)) return 'py';
+    if (/^makefile$|\.mk$|\.sh$|\.bash$/.test(p)) return 'sh';
+    if (/\.gd$/.test(p)) return 'gd';
+    if (/\.lua$/.test(p)) return 'lua';
+    if (/\.(js|mjs|cjs|ts)$/.test(p)) return 'js';
+    if (/\.(md|txt|svg)$/.test(p) || /\.gitignore$/.test(p)) return 'text';
+    if (/\.(cs|cpp|cc|h|hpp|java|rs|glsl|vert|frag)$/.test(p)) return 'cline';
+    /* extension-less build files (Makefile, Dockerfile…) — '#' there starts a
+       comment only when preceded by whitespace or line start, otherwise it is
+       Make syntax ($#, #-comments inside recipes are rare). */
+    return 'make';
+  }
+
+  const REGEX_PRECEDERS = new Set(
+    '(,=:[!&|?{};+-*%^~<>'.split('')
+  );
+
+  /* True when a '/' at i opens a regex LITERAL rather than being the
+     division / comment operator. Decided from the last significant token
+     character before it: after a value (identifier, number, ')' or ']' or a
+     string/regex terminator) a slash can only divide. */
+  function regexAllowed(src, i) {
+    let k = i - 1;
+    while (k >= 0 && /\s/.test(src[k])) k--;
+    if (k < 0) return true;
+    const c = src[k];
+    if (REGEX_PRECEDERS.has(c)) return true;
+    if (/[A-Za-z0-9_$)\]'"`]/.test(c)) {
+      const kw = /(?:^|[^\w$.])(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/.test(src.slice(0, k + 1));
+      return kw;
+    }
+    return true; // punctuation we do not model → assume operator position
+  }
+
+  /* Returns index just past a well-formed /…/flags literal, or -1 when the
+     slash is really a division operator (unclosed on this line). */
   function scanRegex(src, i) {
     const n = src.length;
-    let j = i + 1, cls = false, ok = false;
+    let j = i + 1, cls = false;
     while (j < n) {
       const ch = src[j];
       if (ch === '\\') { j += 2; continue; }
-      if (ch === '\n') break;
+      if (ch === '\n' || ch === '\r') return -1;         // unterminated → division
       if (ch === '[') cls = true;
       else if (ch === ']') cls = false;
-      else if (ch === '/' && !cls) {
-        // must be followed by flags, operator, punctuation or EOL — not an identifier start
-        const nx = src[j + 1];
-        if (!nx || !/[A-Za-z0-9_$]/.test(nx)) { ok = true; j++; break; }
-        j++; break;
-      }
+      else if (ch === '/' && !cls) { j++; while (j < n && /[dgimsuvy]/.test(src[j])) j++; return j; }
       j++;
     }
-    if (!ok) return -1;
-    while (j < n && /[gimsuyd]/.test(src[j])) j++;   // flags
-    return j;
+    return -1;                                            // ran off the end
   }
 
-  function langFor(path) {
-    if (/\.html?$/i.test(path)) return 'html';
-    if (/\.css$/i.test(path)) return 'css';
-    if (/\.(json|webmanifest)$/i.test(path)) return 'json';
-    if (/\.py$/i.test(path)) return 'py';
-    if (/^Makefile$|\.sh$/i.test(path)) return 'sh';
-    if (/\.gd$/i.test(path)) return 'gd';
-    if (/\.lua$/i.test(path)) return 'lua';
-    if (/\.(md|txt)$/i.test(path) || /\.gitignore$/i.test(path)) return 'text';
-    if (/\.(js|mjs)$/i.test(path)) return 'js';
-    return 'cline'; // c-family: C/C++/Java/C#/GLSL/Rust — // and /* */
-  }
-
+  /* One-pass, context aware stripper. Comments become spaces and string
+     payloads become '·' so that delimiter counting sees only real code.
+     Line count is preserved exactly, which keeps reported line numbers
+     aligned with the original source. */
   function blank(src, path) {
     const lg = langFor(path || '');
-    const lineMarks = LINE_MARK[lg] !== undefined ? LINE_MARK[lg] : [];
-    const blockPairs = lg === 'html' ? [['<!--', '-->']]
-      : lg === 'lua' ? [['--[[', ']]']]
-      : (lg === 'json' || lg === 'text') ? []
-      : [['/*', '*/']];   // js, c-family, css, py, sh, gd, glsl
-    const triple = (lg === 'py');
-    const hashLine = lg === 'py' || lg === 'sh' || lg === 'gd';
-
-    const regexOk = lg === 'js' || lg === 'cline';
-    let out = '';
+    const cfg = LANGS[lg] || LANGS.cline;
+    const marks = cfg.marks, blocks = cfg.blocks, strs = cfg.str, triples = cfg.triple || [];
+    const hashLine = marks.indexOf('#') >= 0 && lg !== 'py';   // py handles '#' via marks too
+    const makeLike = lg === 'make';
+    const regexOk = !!cfg.regex;
+    const out = [];
     const n = src.length;
     let i = 0;
+
     while (i < n) {
       const c = src[i];
+
+      /* block comments */
       let hit = false;
-
-      /* regex literals in JS-family sources: blank from / to the closing / */
-      if (regexOk && c === '/' && src[i + 1] !== '*' && src[i + 1] !== '/') {
-        const j = scanRegex(src, i);
-        if (j > i) { out += ' '.repeat(j - i); i = j; continue; }
-      }
-
-      for (const [open, close] of blockPairs) {
+      for (const [open, close] of blocks) {
         if (src.startsWith(open, i)) {
           const j = src.indexOf(close, i + open.length);
-          if (j < 0) return null;                       // unterminated → unreliable
+          if (j < 0) return null;                     // unterminated → unreliable
           const e = j + close.length;
-          out += ' '.repeat(e - i); i = e; hit = true; break;
+          out.push(spans(src.slice(i, e)));
+          i = e; hit = true; break;
         }
       }
       if (hit) continue;
 
-      if (triple && (src.startsWith('"""', i) || src.startsWith("'''", i))) {
-        const q = src.substr(i, 3);
-        const j = src.indexOf(q, i + 3);
-        const e = j < 0 ? n : j + 3;
-        out += ' '.repeat(e - i); i = e; continue;
-      }
-
-      for (const m of lineMarks) {
+      /* line comments */
+      for (const m of marks) {
         if (src.startsWith(m, i)) {
           let j = i; while (j < n && src[j] !== '\n') j++;
-          out += ' '.repeat(j - i); i = j; hit = true; break;
+          out.push(spans(src.slice(i, j)));
+          i = j; hit = true; break;
         }
       }
       if (hit) continue;
 
-      if (hashLine && c === '#') { let j = i; while (j < n && src[j] !== '\n') j++; out += ' '.repeat(j - i); i = j; continue; }
-
-      if (c === '"' || c === "'" || c === '`') {
-        let j = i + 1;
-        while (j < n) {
-          if (src[j] === '\\') { j += 2; continue; }
-          if (src[j] === c) { j++; break; }
-          if (src[j] === '\n' && c !== '`') break;
-          j++;
-        }
-        out += '·'.repeat(j - i); i = j; continue;
+      /* bare '#' line comments (shell / gdscript / python) */
+      if (hashLine && c === '#') {
+        let j = i; while (j < n && src[j] !== '\n') j++;
+        out.push(spans(src.slice(i, j))); i = j; continue;
       }
 
-      out += c; i++;
+      /* Makefile-style inline '#' — only when it starts a word */
+      if (makeLike && c === '#' && (i === 0 || /[\s]/.test(src[i - 1]))) {
+        let j = i; while (j < n && src[j] !== '\n') j++;
+        out.push(spans(src.slice(i, j))); i = j; continue;
+      }
+
+      /* regex literals (JS family, operator-position aware) */
+      if (regexOk && c === '/' && src[i + 1] !== '/' && src[i + 1] !== '*' && regexAllowed(src, i)) {
+        const j = scanRegex(src, i);
+        if (j > i) { out.push(spans(src.slice(i, j))); i = j; continue; }
+      }
+
+      /* triple-quoted strings (python) */
+      hit = false;
+      for (const [open, close] of triples) {
+        if (src.startsWith(open, i)) {
+          const j = src.indexOf(close, i + open.length);
+          const e = j < 0 ? n : j + close.length;
+          out.push(blanks(src.slice(i, e)));
+          i = e; hit = true; break;
+        }
+      }
+      if (hit) continue;
+
+      /* quoted strings / template literals */
+      if (strs.indexOf(c) >= 0) {
+        const j = scanString(src, i, c, cfg.tpl);
+        if (j === null) return null;                  // unterminated literal
+        out.push(payload(src.slice(i, j), c, cfg.tpl));
+        i = j; continue;
+      }
+
+      out.push(c); i++;
     }
-    return out;
+    return out.join('');
   }
 
-  function balance(text) {
+  /* advance past a string/template literal opened at i; null when unterminated */
+  function scanString(src, i, q, tpl) {
+    const n = src.length;
+    let j = i + 1;
+    while (j < n) {
+      const ch = src[j];
+      if (ch === '\\') { j += 2; continue; }
+      if (ch === q) return j + 1;
+      if (ch === '\n' && q !== '`') return null;      // classic string cannot span lines
+      j++;
+    }
+    return null;                                       // EOF inside literal
+  }
+
+  /* keep quotes/delimiters visible, mask the payload; template `${}` regions
+     are restored verbatim because they hold real code */
+  function payload(seg, q, tpl) {
+    if (q !== '`' || !tpl) {
+      let s = q;
+      for (let k = 1; k < seg.length - 1; k++) s += (seg[k] === '\n' ? '\n' : '·');
+      if (seg.length > 1) s += q;
+      return s;
+    }
+    /* template literal: walk it, masking text runs, keeping ${...} code */
+    let res = '`', k = 1;
+    const n = seg.length - 1;                          // skip closing backtick
+    while (k < n) {
+      if (seg[k] === '\\') { res += '··'; k += 2; continue; }
+      if (seg.startsWith('${', k)) {
+        let depth = 0, j = k + 1;
+        for (; j < n; j++) {
+          if (seg[j] === '{') depth++;
+          else if (seg[j] === '}') { depth--; if (!depth) break; }
+        }
+        res += '${' + seg.slice(k + 2, Math.min(j, n)) + (j < n ? '}' : '');
+        k = Math.min(j + 1, n);
+        continue;
+      }
+      res += seg[k] === '\n' ? '\n' : '·';
+      k++;
+    }
+    return res + '`';
+  }
+
+  const spans = s => s.replace(/[^\n]/g, ' ');
+  const blanks = s => s.replace(/[^\n]/g, ' ');
+
+  /* Count delimiter nesting on already-blanked text. Optional `tags` marks a
+     region as markup (HTML element bodies), where '<' / '>' are tag brackets
+     and must not be read as comparison operators or stray delimiters. */
+  function balance(text, tags) {
     const pairs = { '}': '{', ')': '(', ']': '[' };
     const opens = { '{': 1, '(': 1, '[': 1 };
     const stack = [];
     let line = 1;
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
-      if (c === '\n') line++;
+      if (c === '\n') { line++; continue; }
+      if (tags && (c === '<' || c === '>')) continue;   // markup brackets
       if (opens[c]) stack.push({ c, line });
       else if (pairs[c]) {
         const top = stack.pop();
-        if (!top || top.c !== pairs[c]) return { ok: false, line, why: 'unexpected "' + c + '"' + (top ? ' (opened line ' + top.line + ')' : '') };
+        if (!top || top.c !== pairs[c]) {
+          return { ok: false, line, why: 'unexpected "' + c + '" (expected "' + (top ? closeOf(top.c) : c === ')' ? ')' : c === ']' ? ']' : '}') + '")' + (top ? ' — opened line ' + top.line + ', closed line ' + line : '') };
+        }
       }
     }
-    if (stack.length) { const t = stack[stack.length - 1]; return { ok: false, line: t.line, why: 'unclosed "' + t.c + '"' }; }
+    if (stack.length) { const t = stack[stack.length - 1]; return { ok: false, line: t.line, why: 'unclosed "' + t.c + '" (never closed before EOF)' }; }
     return { ok: true, line: 0 };
   }
+
+  const closeOf = c => (c === '{' ? '}' : c === '(' ? ')' : ']');
 
   /* Real parse of generated browser JS using the host engine (no eval of
      untrusted remote code — this is locally synthesized source). */
