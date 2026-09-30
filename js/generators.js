@@ -444,16 +444,23 @@ requestAnimationFrame(frame);
 })();`;
   }
 
-  /* ─────────── HTML shell ─────────── */
+  /* ─────────── HTML shell ───────────
+     The HUD stylesheet is INLINED into index.html so the game is
+     self-contained: the srcdoc iframe preview and a downloaded copy
+     both render with zero sibling-file fetches (no black screen).
+     css/hud.css is still emitted as the canonical source of truth. */
   function genIndexHTML(plan) {
     const g = plan.genreLabel;
+    const hud = genHudCSS(plan);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${plan.title} — built by ARCGEN</title>
-<link rel="stylesheet" href="css/hud.css" />
+<style>
+${hud}
+</style>
 </head>
 <body class="mode-${plan.view}">
 <header class="hud">

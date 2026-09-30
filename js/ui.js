@@ -280,9 +280,22 @@
   /* ───────── preview ───────── */
   function singleFileHTML(build) {
     const f = build.files;
-    return (f['index.html'] || '')
-      .replace('<link rel="stylesheet" href="css/hud.css" />', '<style>\n' + (f['css/hud.css'] || '') + '\n</style>')
-      .replace('<script src="js/game.js"></script>', '<script>\n' + (f['js/game.js'] || '') + '\n</script>');
+    let html = f['index.html'] || '';
+    /* Inline css/hud.css when the shell references it (older builds).
+       Newer builds already ship an inlined <style>, so this is a no-op. */
+    if (/<link[^>]+href=["']css\/hud\.css["']/.test(html)) {
+      html = html.replace(/<link[^>]+href=["']css\/hud\.css["'][^>]*>/,
+        '<style>\n' + (f['css/hud.css'] || '') + '\n</style>');
+    }
+    /* Inline the runtime script — srcdoc iframes cannot resolve sibling files. */
+    if (/<script src=["']js\/game\.js["']><\/script>/.test(html)) {
+      html = html.replace('<script src="js/game.js"></script>',
+        '<script>\n' + (f['js/game.js'] || '') + '\n</script>');
+    } else if (!/<script[\s>][\s\S]*?requestAnimationFrame/.test(html)) {
+      /* defensive fallback: shell has neither tag nor inline runtime */
+      html = html.replace('</body>', '<script>\n' + (f['js/game.js'] || '') + '\n</script>\n</body>');
+    }
+    return html;
   }
 
   function loadPreview() {
