@@ -433,10 +433,21 @@
     $('#btnUndoAll').onclick = () => revertPatch(true);
 
     /* upload — topbar button loads a project so adjustments can target it */
-    const upBtn = $('#btnUpload'), upIn = $('#uploadInput');
-    if (upBtn && upIn) {
-      upBtn.onclick = () => upIn.click();
+    const upIn = $('#uploadInput');
+    const openPicker = () => { if (upIn) upIn.click(); };
+    ['#btnUpload', '#btnUploadPin'].forEach(sel => {
+      const b = $(sel);
+      if (b) b.onclick = openPicker;
+    });
+    if (upIn) {
       upIn.addEventListener('change', () => { handleUpload(upIn.files); upIn.value = ''; });
+    }
+    /* safety net: if the app ever renders without the buttons (stale DOM),
+       Alt+U still opens the ingestion picker */
+    document.addEventListener('keydown', e => {
+      if (e.altKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); openPicker(); }
+    });
+    {
       /* drag & drop anywhere on the app shell also ingests a project */
       const app = $('#app');
       ['dragenter', 'dragover'].forEach(ev => app.addEventListener(ev, e => {

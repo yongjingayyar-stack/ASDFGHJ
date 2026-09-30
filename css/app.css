@@ -434,6 +434,20 @@
 .btn-upload:hover { border-color: var(--cyan); box-shadow: 0 0 18px -6px rgba(53, 242, 215, .6); }
 .btn-upload svg { flex: none; }
 
+/* pinned twin — always docked at the absolute top-right of the viewport,
+   immune to topbar overflow / narrow windows hiding the inline button */
+.upload-pin {
+  position: fixed; top: 9px; right: 14px; z-index: 95;
+  background: rgba(10, 15, 28, .92); backdrop-filter: blur(8px);
+}
+@media (min-width: 1101px) {
+  /* inline button fits comfortably — hide the duplicate */
+  .upload-pin { display: none; }
+}
+@media (max-width: 860px) {
+  .top-stats #btnUpload { display: none; } /* keep exactly one Upload control */
+}
+
 /* drag & drop ingestion highlight */
 .app.is-dragging::after {
   content: "DROP PROJECT — .zip · build.json · game files";

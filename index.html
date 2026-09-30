@@ -65,6 +65,11 @@
         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span>Upload</span>
       </button>
+      <!-- pinned twin: guaranteed visible top-right even if the topbar overflows -->
+      <button id="btnUploadPin" class="btn btn-upload upload-pin" aria-label="Upload project" title="Upload project (.zip · .json · game files) — parsed on-device">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Upload</span>
+      </button>
       <input type="file" id="uploadInput" hidden accept=".zip,.json,.js,.ts,.html,.htm,.css,.md,.cs,.cpp,.cc,.cxx,.h,.hpp,.java,.py,.rs,.lua,.gd,.glsl,.vert,.frag,.png,.jpg,.jpeg,.gif,.wav,.ogg,.mp3,.txt,.yml,.yaml,.toml,.cfg,.ini,.makefile,CMakeLists,multiple" />
     </div>
   </header>
