@@ -264,15 +264,31 @@
     catch (e) { an = null; U.logLine('err', 'intent parser fault: ' + e.message); }
     U.toolLive('planner', false);
 
-    if (!an || !an.matched || !an.ops || !an.ops.length) {
-      U.logLine('warn', 'no recognized adjustment in that directive — try feature words (double jump, dash, pause menu…), knobs (faster, fire rate, waves…) or colours');
+    if (!an || !an.ok) {
+      U.logLine('warn', (an && an.error) || 'adjustment could not be analyzed');
       U.toast('adjustment not recognized', 'err');
       S.setStatus('ready', 'idle');
       if (btn) btn.disabled = false;
       return false;
     }
 
-    U.logLine('plan', 'intent → ' + an.ops.length + ' patch op(s) over ' +
+    /* surface diagnostic / audit notes from the analyzer (self-heal reports etc.) */
+    if (an.notes && an.notes.length) {
+      const isHeal = /black|blank|screen|sound|audio|crash|broken|regenerat|self-heal/i.test(an.ops ? an.ops.map(o => o.why).join(' ') : '');
+      an.notes.forEach(n => U.logLine(/^⚠/.test(n) ? 'warn' : (isHeal && /^✓/.test(n)) ? 'ok' : 'sys', n));
+    }
+
+    if (!an.matched || !an.ops || !an.ops.length) {
+      U.logLine('warn', 'no recognized adjustment in that directive — try feature words (double jump, dash, pause menu…), knobs (faster, fire rate, waves…), colours, or describe the problem ("black screen", "no sound")');
+      U.toast('adjustment not recognized', 'err');
+      S.setStatus('ready', 'idle');
+      if (btn) btn.disabled = false;
+      return false;
+    }
+
+    if (an.diagnostic) U.logLine('plan', 'self-heal mode · ' + an.ops.length + ' repair op(s) over ' +
+      [...new Set(an.ops.map(o => o.path))].join(', '));
+    else U.logLine('plan', 'intent → ' + an.ops.length + ' patch op(s) over ' +
       [...new Set(an.ops.map(o => o.path))].join(', '));
     U.toolLive('coder', true);
     await sleep(200);

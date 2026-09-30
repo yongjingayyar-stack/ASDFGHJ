@@ -1857,5 +1857,5 @@ compile:native:
   }
 
   global.Arc = global.Arc || {};
-  global.Arc.Generators = { generate, filesFor, EMITTERS };
+  global.Arc.Generators = { generate, filesFor, EMITTERS, genGameJS, genIndexHTML, genHudCSS };
 })(window);

@@ -426,6 +426,133 @@ render = function () {
     return touched;
   }
 
+  /* ── self-heal diagnostics (problem-report directives) ──────
+     When the user reports a SYMPTOM ("black screen", "game won't
+     start", "no sound") instead of naming a feature/knob, we run
+     deterministic checks against the live build and emit concrete
+     repair ops. Fully local: static inspection + vm-based runtime
+     smoke test of the generated script. */
+  const SYMPTOM_RX = /\b(black|blank|white)\s+screen\b|\bdark\s+screen\b|\bscreen\s+(?:is|stays?|shows?)\s*(?:black|blank|nothing|dark)|won'?t\s+(?:start|load|run|render)|doesn'?t\s+(?:start|load|run|work|render|show)|no\s+(?:sound|audio|music)|can'?t\s+see|nothing\s+(?:shows|happens|renders)|freeze[sd]?|frozen|crash(?:es|ed)?|error(?:s)?\s+(?:on|in)\s+(?:the\s+)?(?:console|screen)|broken|unplayable|not\s+(?:loading|running|working|visible)/i;
+
+  /* Runtime smoke test: evaluate the emitted game script in a stubbed
+     DOM. Catches ReferenceError / TypeError that produce a black canvas.
+     Returns { crash, error } — never throws. */
+  function smokeTest(src) {
+    try {
+      if (typeof window !== 'undefined' && typeof window.document === 'object') return { crash: false }; // browser: preview iframe is the real test
+      let vm = null;
+      try { if (typeof require === 'function') vm = require('vm'); } catch (e) { vm = null; }
+      if (!vm) return { crash: false };   // no node vm available — skip smoke test, static checks still run
+      const noop = () => {};
+      const ctxStub = { fillRect: noop, clearRect: noop, drawImage: noop, save: noop, restore: noop, beginPath: noop, arc: noop, fill: noop, stroke: noop, moveTo: noop, lineTo: noop, fillText: noop, measureText: () => ({ width: 10 }), translate: noop, scale: noop, rotate: noop, closePath: noop, rect: noop, strokeRect: noop, setTransform: noop };
+      const mkEl = () => ({ getContext: () => ctxStub, style: {}, classList: { add: noop, remove: noop, toggle: noop }, textContent: '', innerHTML: '', width: 960, height: 540, addEventListener: noop, appendChild: noop, querySelectorAll: () => [], dataset: {} });
+      const document = { getElementById: mkEl, createElement: mkEl, body: mkEl(), addEventListener: noop, querySelector: () => null, querySelectorAll: () => [] };
+      const win = { document, devicePixelRatio: 1, innerWidth: 960, innerHeight: 540, localStorage: { getItem: () => null, setItem: noop, removeItem: noop }, navigator: { getGamepads: () => [] }, requestAnimationFrame: noop, setTimeout: noop, setInterval: noop, addEventListener: noop, dispatchEvent: noop, AudioContext: undefined, matchMedia: () => ({ matches: false }) };
+      win.window = win;
+      const sandbox = new Proxy(win, { has: () => true, get: (o, p) => (p in o ? o[p] : undefined), set: (o, p, v) => { o[p] = v; return true; } });
+      vm.createContext(sandbox);
+      vm.runInContext('(function(){' + src + '\n})();', sandbox, { timeout: 2500 });
+      if (typeof sandbox.frame === 'function') for (let i = 0; i < 130; i++) sandbox.frame(i * 16.7);
+      return { crash: false };
+    } catch (e) {
+      return { crash: true, error: (e && e.constructor ? e.constructor.name + ': ' : '') + (e && e.message ? e.message : String(e)) };
+    }
+  }
+
+  /* Build the repair op list for a symptom directive. Mutates pushOp/notes.
+     Returns true when at least one genuine problem was found & repaired. */
+  function diagnose(t, push, notes, b, jsPath, htmlPath, cssPath) {
+    let healed = false;
+    const wantsAudio = /no\s+(sound|audio|music)|silent/.test(t);
+    const wantsVisual = !wantsAudio;   // black/blank/broken/crash reports default to visual pipeline checks
+
+    /* D1 · runtime missing entirely from the tree */
+    if (wantsVisual && !jsPath) {
+      notes.push('runtime js/game.js missing from project — regenerating core modules');
+      healCore(push, b, notes);
+      return true;
+    }
+
+    if (jsPath) {
+      const src = b.files[jsPath] || '';
+
+      /* D2 · canvas binding fault (classic black-screen cause) */
+      if (wantsVisual && /getElementById\(\s*["'](?:(?!["'])[^"']*)["']\s*\)/.test(src)) {
+        const bound = /getElementById\(\s*["']game["']\s*\)/.test(src);
+        if (!bound) {
+          const fixed = src.replace(/getElementById\(\s*["'][^"']*["']\s*\)(?=[\s\S]{0,80}?getContext)/, "getElementById('game')");
+          if (fixed !== src) { push(jsPath, fixed, 'self-heal: canvas binding → #game'); notes.push('⚠ canvas element binding was broken — rewired to #game'); healed = true; }
+        }
+      }
+
+      /* D3 · syntax/runtime crash detection via headless smoke test */
+      if (wantsVisual) {
+        const st = smokeTest(src);
+        if (st.crash) {
+          notes.push('⚠ runtime smoke test crashed (' + st.error.slice(0, 90) + ') — regenerating clean runtime');
+          const fresh = Arc.Generators.genGameJS(S.plan);
+          push(jsPath, fresh, 'self-heal: runtime regenerated after smoke-test crash');
+          healed = true;
+        }
+      }
+
+      /* D4 · audio guard: bare AudioContext without webkit fallback */
+      if (wantsAudio && /\bnew AudioContext\(/.test(src) && !/webkitAudioContext/.test(src)) {
+        const fixed = src.replace(/new AudioContext\(/g, "new (window.AudioContext || window.webkitAudioContext)(");
+        push(jsPath, fixed, 'self-heal: audio context webkit fallback'); notes.push('⚠ audio context lacked Safari fallback — guarded'); healed = true;
+      }
+    }
+
+    if (htmlPath) {
+      const h = b.files[htmlPath] || '';
+
+      /* D5 · shell must carry styling (inline <style> or hud.css link) */
+      const styled = /<style[\s>]/i.test(h) || /<link[^>]+hud\.css/i.test(h);
+      if (wantsVisual && !styled) {
+        const cssSrc = cssPath ? (b.files[cssPath] || '') : (Arc.Generators.genHudCSS(S.plan));
+        const fixed = h.replace(/<\/head>/i, '<style>\n' + cssSrc + '\n</style></head>');
+        if (fixed !== h) { push(htmlPath, fixed, 'self-heal: HUD stylesheet inlined into shell'); notes.push('⚠ shell had no styling — HUD stylesheet inlined'); healed = true; }
+      }
+
+      /* D6 · runtime tag present (srcdoc preview can only inline what exists) */
+      const hasRt = /<script[^>]+src=["']js\/game\.js["']/.test(h) || /requestAnimationFrame/.test(h);
+      if (wantsVisual && !hasRt && jsPath) {
+        const fixed = h.replace('</body>', '<script src="js/game.js"></script>\n</body>');
+        if (fixed !== h) { push(htmlPath, fixed, 'self-heal: runtime <script> re-linked in shell'); notes.push('⚠ shell was not loading the runtime — <script> re-linked'); healed = true; }
+      }
+
+      /* D7 · canvas element exists in the stage */
+      if (wantsVisual && !/<canvas/i.test(h)) {
+        const g = (S.plan && S.plan.genreLabel) || {};
+        const cvHtml = '\n<main class="stage"><canvas id="game" width="' + ((S.plan && S.plan.W) || 960) + '" height="' + ((S.plan && S.plan.H) || 540) + '"></canvas><div id="banner" class="banner"></div></main>\n';
+        const fixed = h.replace(/<\/body>/, cvHtml + '</body>');
+        push(htmlPath, fixed, 'self-heal: canvas stage re-injected'); notes.push('⚠ shell had no <canvas> — stage re-injected'); healed = true;
+      }
+    }
+
+    /* D8 · nothing statically wrong → full regeneration sweep (fresh core
+       files from the current plan; removes any accumulated bad patches) */
+    if (!healed) {
+      notes.push('static audit clean — running full regeneration sweep from the stored spec');
+      healCore(push, b, notes);
+      healed = true;
+    }
+    return healed;
+  }
+
+  /* Regenerate the playable web core (index.html, js/game.js, css/hud.css)
+     straight from the stored plan — the AI's own generators, deterministic. */
+  function healCore(push, b, notes) {
+    const plan = S.plan;
+    if (!plan || !global.Arc || !Arc.Generators) { notes.push('generators unavailable — cannot regenerate'); return; }
+    try {
+      push('index.html', Arc.Generators.genIndexHTML(plan), 'regen: index.html from spec');
+      push('js/game.js', Arc.Generators.genGameJS(plan), 'regen: js/game.js from spec');
+      push('css/hud.css', Arc.Generators.genHudCSS(plan), 'regen: css/hud.css from spec');
+      notes.push('✓ core shell + runtime + stylesheet rebuilt from the stored game spec');
+    } catch (e) { notes.push('regeneration fault: ' + e.message); }
+  }
+
   /* ───────────────────────── main entry ───────────────────────── */
   /* Working copy of a file inside this analysis pass. Chained edits
      on the same path accumulate instead of clobbering each other. */
@@ -447,13 +574,26 @@ render = function () {
 
     const jsPath = findFile(/(^|\/)js\/game\.js$/);
     const htmlPath = findFile(/(^|\/)index\.html$/);
+    const cssPath = findFile(/(^|\/)css\/hud\.css$/);
     const gddPath = findFile(/(^|\/)gdd\.md$/);
     const neg = REMOVE_RX.test(t);
 
     function pushOp(path, to, why) {
       const ex = ops.find(o => o.path === path);
       if (ex) { ex.to = to; ex.whys.push(why); }
-      else ops.push({ path, from: b.files[path], to, whys: [why] });
+      else ops.push({ path, from: b.files[path] !== undefined ? b.files[path] : null, to, whys: [why] });
+    }
+
+    /* 0 · symptom reports ("black screen", "won't start", "no sound")
+       route into the self-heal diagnostic pipeline instead of being
+       rejected as unrecognized directives. */
+    let diagnostic = false;
+    if (SYMPTOM_RX.test(t)) {
+      const before = ops.length;
+      matchedAny = diagnose(t, pushOp, notes, b, jsPath, htmlPath, cssPath);
+      if (matchedAny) diagnostic = true;
+      else notes.push('symptom noted but no repairable fault found — describe it again or try feature/knob words');
+      void before;
     }
 
     /* 1 · features (add / remove) */
@@ -594,6 +734,7 @@ render = function () {
       ops: finalOps,
       notes,
       matched: matchedAny,
+      diagnostic,
       directive: String(text).trim(),
       newTitle,
       files: finalOps.map(o => o.path)
@@ -605,7 +746,7 @@ render = function () {
   function apply(an) {
     const b = S.build;
     const backup = {};
-    an.ops.forEach(o => { backup[o.path] = b.files[o.path]; });
+    an.ops.forEach(o => { backup[o.path] = (o.from === null || o.from === undefined) ? null : b.files[o.path]; });
     an.ops.forEach(o => { b.files[o.path] = o.to; });
     b.patched = (b.patched || 0) + 1;
     b.lastPatch = { at: Date.now(), directive: an.directive, ops: an.ops.map(o => o.why), files: an.files };
@@ -622,7 +763,7 @@ render = function () {
     const b = S.build;
     if (!b || !b.history || !b.history.length) return null;
     const snap = b.history.pop();
-    Object.entries(snap.backup).forEach(([p, txt]) => { b.files[p] = txt; });
+    Object.entries(snap.backup).forEach(([p, txt]) => { if (txt === null) delete b.files[p]; else b.files[p] = txt; });
     if (S.plan && snap.titleBefore) S.plan.title = snap.titleBefore;
     b.lastPatch = { at: Date.now(), directive: 'revert', ops: ['reverted: ' + (snap.directive || 'patch')], files: Object.keys(snap.backup) };
     S.save();
