@@ -166,14 +166,30 @@
   }
 
   /* ───────── language picker & quick tags ───────── */
+  /* Multi-select stack: click toggles a language in/out; the first click on
+     an inactive chip promotes it to primary. js/html/css/json stay implicit
+     via the playable core, but chips drive what gets emitted per pass. */
   function renderLangPicker() {
     const box = $('#langPicker'); box.innerHTML = '';
-    ['js', 'html', 'css', 'cs', 'cpp', 'java', 'py'].forEach(id => {
+    if (!Array.isArray(S.langs) || !S.langs.length) S.langs = [S.lang || 'js'];
+    ['js', 'html', 'css', 'cs', 'cpp', 'java', 'py', 'glsl', 'gd', 'rs', 'lua'].forEach(id => {
       const l = S.LANGS.find(x => x.id === id);
+      const on = S.langs.includes(id);
       const b = document.createElement('button');
-      b.className = 'lang-btn' + (S.lang === id ? ' is-on' : '');
-      b.textContent = l.label; b.title = l.note;
-      b.onclick = () => { S.lang = id; renderLangPicker(); S.save(); toast('primary target → ' + l.label); };
+      b.className = 'lang-btn' + (on ? ' is-on' : '') + (id === S.lang && on ? ' is-primary' : '');
+      b.textContent = l.label;
+      b.title = l.note + (on ? ' — in stack (click to remove)' : ' — click to add to stack');
+      b.onclick = () => {
+        if (S.langs.includes(id)) {
+          if (id === 'js') { toast('JavaScript core is mandatory', 'err'); return; }
+          S.langs = S.langs.filter(x => x !== id);
+          if (S.lang === id) S.lang = S.langs[0] || 'js';
+        } else {
+          S.langs.push(id); S.lang = id;               // last added becomes primary
+        }
+        renderLangPicker(); S.save();
+        toast('stack → ' + S.langs.map(x => (S.LANGS.find(y => y.id === x) || {}).label).join(' + ') + ' · primary ' + (S.LANGS.find(y => y.id === S.lang) || {}).label);
+      };
       box.appendChild(b);
     });
   }
@@ -276,7 +292,8 @@
     frame.srcdoc = html;
     frame.style.display = 'block'; empty.style.display = 'none';
     $('#previewTitle').textContent = b.title || b.name;
-    $('#previewSub').textContent = (b.genreLabel || '') + ' · seed ' + b.seed + ' · ' + Object.keys(b.files).length + ' files';
+    const langs = (b.langs && b.langs.length) ? b.langs : [b.lang || 'js'];
+    $('#previewSub').textContent = (b.genreLabel || '') + ' · seed ' + b.seed + ' · ' + Object.keys(b.files).length + ' files · ' + langs.length + ' languages';
     applyViewport();
   }
 

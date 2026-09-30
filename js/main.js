@@ -67,9 +67,10 @@
     U.pipeSet('parse', 'done'); U.pipeSet('plan', 'run');
     await sleep(220);
 
-    const plan = Arc.Planner.plan(prompt, S.lang, S.persona);
+    const plan = Arc.Planner.plan(prompt, S.lang, S.persona, S.langs);
     S.plan = plan;
     U.logLine('plan', 'genre → ' + plan.genre + ' (' + plan.genreLabel.tagline + ') · view ' + plan.view + ' · seed ' + (plan.seed >>> 0));
+    U.logLine('plan', 'language stack → ' + plan.langs.map(x => (S.LANGS.find(l => l.id === x) || {}).label || x).join(' + ') + ' (' + plan.langs.length + ' languages in parallel)');
     U.logLine('plan', 'title candidate: “' + plan.title + '” · palette ' + plan.palette.join(' '));
     plan.pillars.forEach(p => U.logLine('plan', 'pillar · ' + p));
     U.pipeSet('plan', 'done'); U.pipeSet('arch', 'run');
@@ -78,19 +79,34 @@
     U.logLine('plan', 'budget: ≤' + plan.budget.frameMs + 'ms/frame · ≤' + plan.budget.maxSprites + ' sprites · ≤' + plan.budget.bundleKb + 'KB source');
     U.pipeSet('arch', 'done');
 
-    /* 2 · code synthesis (CODER EXECUTOR) */
+    /* 2 · code synthesis (CODER EXECUTOR) — parallel per-language lanes */
     U.pipeSet('code', 'run'); U.toolLive('planner', false); U.toolLive('coder', true);
     await U.typeLine('code', 'streaming runtime · ' + plan.systems.length + ' systems · fixed timestep + seeded RNG + input map');
+    const LN = Arc.Planner.LANG_NAMES;
+    const laneNarration = {
+      js:   'lane[JavaScript] → js/game.js state machine, entities, fx, synth audio',
+      html: 'lane[HTML] → index.html shell + webmanifest',
+      css:  'lane[CSS] → hud.css skin, responsive layout',
+      json: 'lane[JSON] → data/tables.json + architecture.json contracts',
+      cs:   'lane[C#] → Unity PlayerController + project.meta from shared CFG',
+      cpp:  'lane[C++] → Unreal UfoPawn + native SDL2 main.cpp + CMakeLists',
+      java: 'lane[Java] → LibGDX screen + javac harness (same mulberry32 stream)',
+      py:   'lane[Python] → pygame prototype + tuning_tool.py validator',
+      gd:   'lane[GDScript] → Godot player.gd + project.godot scaffold',
+      rs:   'lane[Rust] → wasm-bindgen sim core + Cargo.toml',
+      lua:  'lane[Lua] → chaos mod + config.lua hook table',
+      glsl: 'lane[GLSL] → crt.glsl + bloom.glsl post passes'
+    };
     const narration = [
       'emit js/game.js — state machine menu/play/pause/over',
-      'emit entity behaviours · collision narrowphase · wave spawner',
-      'emit fx layer — particles, screen shake, hit-stop, synth audio',
-      'persona check → juice coefficient ' + plan.influence.juice.toFixed(2) + ', prose output suppressed'
+      ...plan.langs.map(id => laneNarration[id] || ('lane[' + (LN[id] || id) + '] → module synthesis'))
     ];
-    for (const n of narration) { await sleep(150); U.logLine('code', n); }
+    if (plan.langs.length > 1) narration.push('cross-language contract check: CFG values mirrored across ' + plan.langs.length + ' targets · persona juice ' + plan.influence.juice.toFixed(2));
+    narration.push('persona check → prose output suppressed');
+    for (const n of narration) { await sleep(110); U.logLine('code', n); }
     U.pipeSet('code', 'done');
 
-    /* 3 · file generation (FILE GENERATOR) */
+    /* 3 · file generation (FILE GENERATOR) — batch emit, many files at once */
     U.pipeSet('assets', 'run'); U.toolLive('coder', false); U.toolLive('files', true);
     let files;
     try { files = Arc.Generators.generate(plan, S.persona); }
@@ -99,16 +115,21 @@
       finish(true); return;
     }
     const paths = Object.keys(files);
-    U.logLine('file', 'project tree → ' + paths.length + ' files · ' + (Object.values(files).reduce((n, t) => n + t.length, 0) / 1024).toFixed(1) + ' KB');
-    for (const p of paths.slice(0, 10)) { await sleep(45); U.logLine('file', 'wrote ' + p + '  (' + (files[p].length / 1024).toFixed(1) + ' KB)'); }
-    U.logLine('file', '+ ' + (paths.length - 10) + ' more (ports, shaders, data tables, tooling)');
+    U.logLine('file', 'batch pass → ' + paths.length + ' files emitted in one sweep · ' + (Object.values(files).reduce((n, t) => n + t.length, 0) / 1024).toFixed(1) + ' KB');
+    /* group by directory so the log reads like a real emitter */
+    const groups = {};
+    paths.forEach(p => { const d = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '(root)'; (groups[d] = groups[d] || []).push(p); });
+    for (const [dir, list] of Object.entries(groups)) {
+      await sleep(60);
+      U.logLine('file', 'wrote ' + dir + '/ ← ' + list.length + ' file(s): ' + list.map(p => p.split('/').pop()).join(', '));
+    }
     U.pipeSet('assets', 'done');
 
     /* 4 · terminal pass (TERMINAL EXECUTOR) */
     U.pipeSet('compile', 'run'); U.toolLive('files', false); U.toolLive('terminal', true);
     const build = {
       name: plan.slug, title: plan.title, short: plan.title.split(' ')[0],
-      files, lang: plan.lang, seed: plan.seed >>> 0,
+      files, lang: plan.lang, langs: plan.langs.slice(), seed: plan.seed >>> 0,
       genreLabel: plan.genreLabel.tagline,
       personaDigest: plan.personaDigest, createdAt: Date.now()
     };

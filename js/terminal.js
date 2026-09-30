@@ -19,6 +19,7 @@
     ['build', 'run tools/build.js equivalent (comment strip + size report)'],
     ['test', 'run tools/selftest.js contract checks'],
     ['compile <target>', 'web | unity | unreal | godot | libgdx | wasm'],
+    ['lang [add|rm] <id…>', 'show / edit the multi-language stack (js cs cpp java py glsl gd rs lua html css json)'],
     ['stats', 'model TOPS / accuracy / token burn for this session'],
     ['plan', 'dump current design plan as JSON'],
     ['persona', 'show active system persona'],
@@ -203,6 +204,39 @@
     },
 
     persona() { return Arc.State.persona; },
+    lang(args) {
+      const S = Arc.State;
+      const valid = S.LANGS.map(l => l.id);
+      const label = id => (S.LANGS.find(l => l.id === id) || {}).label || id;
+      const mode = args[0];
+      if (mode === 'add' || mode === 'rm' || mode === 'remove') {
+        const ids = args.slice(1).filter(a => valid.includes(a));
+        if (!ids.length) return 'usage: lang add|rm <' + valid.join('|') + '>  — nothing changed';
+        if (mode === 'add') {
+          ids.forEach(id => { if (!S.langs.includes(id)) S.langs.push(id); });
+          S.lang = ids[ids.length - 1];
+        } else {
+          S.langs = S.langs.filter(x => !(ids.includes(x) && x !== 'js'));   // js core is protected
+          if (!S.langs.includes(S.lang)) S.lang = S.langs[0] || 'js';
+        }
+        S.save();
+        if (Arc.UI.renderLangPicker) Arc.UI.renderLangPicker();
+        return 'stack → ' + S.langs.map(label).join(' + ') + '  (primary: ' + label(S.lang) + ')' +
+               (mode === 'add' ? '\nnext `generate` batch-emits modules for every stack member.' : '');
+      }
+      if (mode) {   // bare ids = set whole stack
+        const ids = args.filter(a => valid.includes(a));
+        if (ids.length === args.length && ids.length) {
+          S.langs = Array.from(new Set(['js', ...ids])); S.lang = ids[0];
+          S.save(); if (Arc.UI.renderLangPicker) Arc.UI.renderLangPicker();
+          return 'stack set → ' + S.langs.map(label).join(' + ');
+        }
+        return 'unknown language: ' + mode + '  (valid: ' + valid.join(', ') + ')';
+      }
+      return 'language stack (' + S.langs.length + '):\n' +
+        S.langs.map((id, i) => '  ' + (i === 0 ? '* ' : '  ') + label(id).padEnd(14) + id).join('\n') +
+        '\nedit with: lang add cpp py | lang rm java | lang cs py lua';
+    },
     clear() { document.getElementById('termOut').innerHTML = ''; return null; },
     open() { Arc.UI.go('preview'); return '→ preview'; },
     download() { Arc.UI.download(); return '→ packaging zip…'; },

@@ -121,6 +121,12 @@
   const ADJ = ['neon', 'cozy', 'brutalist', 'dreamcore', 'vapor', 'subterranean', 'orbital', 'haunted', 'chromatic', 'feral'];
   const NOUN = ['protocol', 'garden', 'circuit', 'relic', 'horizon', 'bazaar', 'engine', 'labyrinth'];
 
+  /* display names for stack narration (kept in sync with State.LANGS) */
+  const LANG_NAMES = {
+    js: 'JavaScript', html: 'HTML', css: 'CSS', cs: 'C#', cpp: 'C++', java: 'Java',
+    py: 'Python', glsl: 'GLSL', gd: 'GDScript', rs: 'Rust', lua: 'Lua', json: 'JSON'
+  };
+
   /* ── parse ────────────────────────────────────────────────── */
   function detectGenre(text) {
     const t = text.toLowerCase();
@@ -166,10 +172,41 @@
     return inf;
   }
 
+  /* ── multi-language stack detection ──────────────────────── */
+  /* The planner reads the directive AND the selected language chips and
+     produces a coherent polyglot stack: every requested language gets a
+     real module in the project tree, wired through shared data tables. */
+  const LANG_HINTS = [
+    { id: 'js',   words: ['javascript', 'vanilla js', 'canvas game', 'html5', 'browser game', 'web game'] },
+    { id: 'html', words: ['html', 'html5 shell', 'single page', 'pwa'] },
+    { id: 'css',  words: ['css', 'stylesheet', 'hud skin'] },
+    { id: 'cs',   words: ['c#', 'csharp', 'unity', 'monodevelop', 'mono behaviour'] },
+    { id: 'cpp',  words: ['c++', 'cpp', 'unreal', 'opengl', 'sdl2', 'raylib', 'native binary', 'native build'] },
+    { id: 'java', words: ['java', 'libgdx', 'lwjgl', 'android port', 'swing'] },
+    { id: 'py',   words: ['python', 'pygame', 'godot python', 'scripting layer'] },
+    { id: 'glsl', words: ['glsl', 'shader', 'shaders', 'fragment shader', 'post fx', 'postfx', 'crt'] },
+    { id: 'gd',   words: ['godot', 'gdscript'] },
+    { id: 'rs',   words: ['rust', 'wasm', 'webassembly'] },
+    { id: 'lua',  words: ['lua', 'modding', 'mod api', 'hot reload script'] },
+    { id: 'json', words: ['data driven', 'data-driven', 'json table', 'tables', 'tuning file'] }
+  ];
+
+  function detectLangs(text, primaryId, extraIds) {
+    const t = (text || '').toLowerCase();
+    const ids = new Set(['js', 'html', 'css', 'json']);   // playable core is always emitted
+    for (const h of LANG_HINTS) if (h.words.some(w => t.includes(w))) ids.add(h.id);
+    (extraIds || []).forEach(id => id && ids.add(id));
+    if (primaryId) ids.add(primaryId);
+    /* order: primary first, then the rest in canonical order */
+    const order = LANG_HINTS.map(h => h.id);
+    return [primaryId].concat(order.filter(id => id !== primaryId && ids.has(id))).filter(Boolean);
+  }
+
   /* ── main entry ───────────────────────────────────────────── */
-  function plan(prompt, lang, persona) {
+  function plan(prompt, lang, persona, extraLangs) {
     const text = (prompt || '').trim() || 'arcade shooter with waves';
-    const seed = hashSeed(text + '|' + lang + '|' + persona.slice(0, 64));
+    const langs = detectLangs(text, lang, extraLangs);
+    const seed = hashSeed(text + '|' + langs.join(',') + '|' + persona.slice(0, 64));
     const r = rng(seed);
     const gid = detectGenre(text);
     const g = GENRES[gid];
@@ -192,14 +229,34 @@
     ];
     if (inf.simHeavy) systems.push({ name: 'Economy', desc: 'data-driven resource tables with tick-based flows' });
 
+    /* per-language emission manifest — one concrete file group per stack member */
+    const EMIT = {
+      js:   () => ['js/game.js (runtime)', 'tools/build.js', 'tools/selftest.js'],
+      html: () => ['index.html (shell)', 'manifest.webmanifest'],
+      css:  () => ['css/hud.css (HUD skin)'],
+      cs:   () => ['ports/unity/PlayerController.cs'],
+      cpp:  () => ['ports/unreal/UfoPawn.cpp', 'native/main.cpp', 'native/CMakeLists.txt'],
+      java: () => ['ports/libgdx/<Game>.java', 'java/ArcGen.java'],
+      py:   () => ['ports/pygame/main.py', 'tools/tuning_tool.py'],
+      gd:   () => ['ports/godot/player.gd'],
+      rs:   () => ['ports/rust/src/lib.rs', 'rust/Cargo.toml'],
+      lua:  () => ['mods/chaos.lua'],
+      glsl: () => ['shader/crt.glsl'],
+      json: () => ['data/tables.json', 'architecture.json']
+    };
+    const filesPlanned = [];
+    langs.forEach(id => (EMIT[id] ? EMIT[id]() : []).forEach(f => filesPlanned.push({ lang: id, file: f })));
+
     const tasks = [
       { id: 'T1', tool: 'planner',  label: 'Write GDD + tuning block' },
       { id: 'T2', tool: 'planner',  label: 'Map module graph & data contracts' },
-      { id: 'T3', tool: 'coder',    label: `Synthesize ${g.tagline} core (${gid})` },
-      { id: 'T4', tool: 'coder',    label: 'Implement entity behaviours + collision' },
-      { id: 'T5', tool: 'files',    label: 'Emit project tree, HTML shell, CSS HUD' },
-      { id: 'T6', tool: 'compiler', label: 'Static pass: syntax, refs, budget' },
-      { id: 'T7', tool: 'terminal', label: 'Bundle + self-test runtime boot' }
+      { id: 'T3', tool: 'planner',  label: 'Resolve polyglot stack (' + langs.length + ' languages)' },
+      { id: 'T4', tool: 'coder',    label: `Synthesize ${g.tagline} core (${gid})` },
+      { id: 'T5', tool: 'coder',    label: 'Implement entity behaviours + collision' },
+      { id: 'T6', tool: 'coder',    label: 'Cross-compile ' + langs.filter(x => !['js','html','css'].includes(x)).map(x => (LANG_NAMES[x] || x)).join(', ') + ' ports from shared spec' },
+      { id: 'T7', tool: 'files',    label: 'Batch-emit project tree (' + filesPlanned.length + ' files)' },
+      { id: 'T8', tool: 'compiler', label: 'Static pass: syntax, refs, budget' },
+      { id: 'T9', tool: 'terminal', label: 'Bundle + self-test runtime boot' }
     ];
 
     return {
@@ -207,6 +264,8 @@
       title: titleCase(text, r),
       slug: slug(text, r),
       lang,
+      langs,                       // full language stack, primary first
+      filesPlanned,                // [{lang,file}] batch manifest for the file generator
       view: g.view,
       palette,
       influence: inf,
@@ -227,5 +286,5 @@
   }
 
   global.Arc = global.Arc || {};
-  global.Arc.Planner = { plan, rng, hashSeed };
+  global.Arc.Planner = { plan, rng, hashSeed, detectLangs, LANG_NAMES };
 })(window);
