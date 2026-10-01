@@ -138,6 +138,7 @@ gdd.md → architecture.json → src/** → assets/** → build report`;
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
           persona: this.persona, guards: this.guards, lang: this.lang, langs: this.langs,
+          attach: this.attach || {},
           builds: this.builds.slice(-4), activeBuild: Math.max(-1, this.activeBuild - (this.builds.length - Math.min(4, this.builds.length)))
         }));
       } catch (e) { /* storage unavailable — non fatal */ }
@@ -151,6 +152,7 @@ gdd.md → architecture.json → src/** → assets/** → build report`;
         if (d.guards) Object.assign(this.guards, d.guards);
         if (d.lang) this.lang = d.lang;
         if (Array.isArray(d.langs) && d.langs.length) this.langs = d.langs;
+        if (d.attach && typeof d.attach === 'object') this.attach = d.attach;
         if (Array.isArray(d.builds)) { this.builds = d.builds; this.activeBuild = d.builds.length ? (d.activeBuild ?? d.builds.length - 1) : -1; }
       } catch (e) { /* ignore corrupt state */ }
     },

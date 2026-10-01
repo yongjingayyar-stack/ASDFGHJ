@@ -65,6 +65,11 @@
         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span>Upload</span>
       </button>
+      <!-- pinned twin: guaranteed visible top-right even if the topbar overflows -->
+      <button id="btnUploadPin" class="btn btn-upload upload-pin" aria-label="Upload project" title="Upload project (.zip · .json · game files) — parsed on-device">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Upload</span>
+      </button>
       <input type="file" id="uploadInput" hidden accept=".zip,.json,.js,.ts,.html,.htm,.css,.md,.cs,.cpp,.cc,.cxx,.h,.hpp,.java,.py,.rs,.lua,.gd,.glsl,.vert,.frag,.png,.jpg,.jpeg,.gif,.wav,.ogg,.mp3,.txt,.yml,.yaml,.toml,.cfg,.ini,.makefile,CMakeLists,multiple" />
     </div>
   </header>
@@ -120,6 +125,17 @@
           </div>
           <textarea id="promptInput" class="prompt-input" rows="3" spellcheck="false"
             placeholder="Describe the game… e.g. “neon top-down racer with drifting, 3 laps, ghost times”"></textarea>
+          <!-- ══ FILE ATTACHER · reference files as context for generation & adjustments ══ -->
+          <div class="attach-dock" id="attachDock">
+            <button class="mini-btn attach-btn" id="btnAttach" title="Attach files as AI context (code, sprites, audio, docs…) — parsed on-device">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M21.4 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.2-9.19a4 4 0 0 1 5.65 5.66l-9.19 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              📎 Attach files
+            </button>
+            <span class="attach-hint">give the AI reference code · sprites · audio · design docs to build or adjust from</span>
+            <div class="attach-chips" id="attachChips"></div>
+            <input type="file" id="attachInput" hidden multiple
+              accept=".zip,.json,.js,.ts,.html,.htm,.css,.md,.cs,.cpp,.cc,.cxx,.h,.hpp,.java,.py,.rs,.lua,.gd,.glsl,.vert,.frag,.png,.jpg,.jpeg,.gif,.webp,.wav,.ogg,.mp3,.txt,.yml,.yaml,.toml,.cfg,.ini,.makefile,CMakeLists" />
+          </div>
           <div class="adjust-dock">
             <input id="adjustInput" class="adjust-input" type="text" spellcheck="false" autocomplete="off"
               placeholder="Adjust the generated game… e.g. “make the player faster, add a double jump”" />
@@ -326,6 +342,7 @@
 <script src="js/compiler.js"></script>
 <script src="js/patches.js"></script>
 <script src="js/upload.js"></script>
+<script src="js/attach.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>

@@ -434,6 +434,20 @@
 .btn-upload:hover { border-color: var(--cyan); box-shadow: 0 0 18px -6px rgba(53, 242, 215, .6); }
 .btn-upload svg { flex: none; }
 
+/* pinned twin — always docked at the absolute top-right of the viewport,
+   immune to topbar overflow / narrow windows hiding the inline button */
+.upload-pin {
+  position: fixed; top: 9px; right: 14px; z-index: 95;
+  background: rgba(10, 15, 28, .92); backdrop-filter: blur(8px);
+}
+@media (min-width: 1101px) {
+  /* inline button fits comfortably — hide the duplicate */
+  .upload-pin { display: none; }
+}
+@media (max-width: 860px) {
+  .top-stats #btnUpload { display: none; } /* keep exactly one Upload control */
+}
+
 /* drag & drop ingestion highlight */
 .app.is-dragging::after {
   content: "DROP PROJECT — .zip · build.json · game files";
@@ -446,3 +460,17 @@
   pointer-events: none;
 }
 @media (max-width: 1100px) { .btn-upload span { display: none; } .btn-upload { padding: 7px 9px; } }
+
+/* ── FILE ATTACHER (📎 context dock) ─────────────────────────── */
+.attach-dock{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 2px}
+.attach-btn{display:inline-flex;align-items:center;gap:6px;border:1px dashed rgba(94,234,212,.45);background:rgba(94,234,212,.06);color:#5eead4;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;transition:.15s}
+.attach-btn:hover{background:rgba(94,234,212,.14);box-shadow:0 0 12px rgba(94,234,212,.25)}
+.attach-hint{font-size:11px;color:var(--txt-dim,#7c8aa5);opacity:.85}
+.attach-chips{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.attach-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(125,211,252,.08);border:1px solid rgba(125,211,252,.3);color:#bae6fd;border-radius:999px;padding:3px 10px;font-size:11px;cursor:default}
+.attach-chip i{font-style:normal;opacity:.8}
+.attach-chip em{font-style:normal;cursor:pointer;opacity:.6;margin-left:2px}
+.attach-chip em:hover{opacity:1;color:#fca5a5}
+.attach-clear{background:none;border:none;color:#7c8aa5;font-size:11px;text-decoration:underline;cursor:pointer;padding:3px 4px}
+.attach-clear:hover{color:#fca5a5}
+@media (max-width:860px){.attach-hint{display:none}}

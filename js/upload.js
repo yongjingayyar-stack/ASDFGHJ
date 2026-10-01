@@ -158,10 +158,14 @@
     }
 
     const plan = H.meta || derivePlan(finalFiles, label);
-    S.addBuild({ id: 'up-' + Date.now().toString(36), name: label, files: finalFiles,
-      lang: plan.lang, createdAt: Date.now(), history: [], uploaded: true });
-    S.plan = plan;
-    S.save();
+    /* attach-mode (H.createBuild === false): read files into context only,
+       do NOT switch the active project */
+    if (H.createBuild !== false) {
+      S.addBuild({ id: 'up-' + Date.now().toString(36), name: label, files: finalFiles,
+        lang: plan.lang, createdAt: Date.now(), history: [], uploaded: true });
+      S.plan = plan;
+      S.save();
+    }
 
     log('ok', 'imported ' + count + ' file(s)' + (zipped ? ' from ' + zipped + ' archive entries' : '') +
       (stripped ? ' · ' + stripped + ' skipped' : ''));
