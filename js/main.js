@@ -2,7 +2,7 @@
    ARCGEN · main.js — boot sequence + orchestration of the five
    tools into one streamed build, preview wiring and packaging.
    ═══════════════════════════════════════════════════════════ */
-(function () {
+(function (global) {
   'use strict';
   const S = Arc.State, U = Arc.UI;
   const $ = U.$, $$ = U.$$;
@@ -715,4 +715,4 @@
   Arc.UI.renderAttachChips = renderAttachChips;
 
   document.readyState === 'loading' ? addEventListener('DOMContentLoaded', init) : init();
-})();
+})(window);
