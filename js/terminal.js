@@ -28,6 +28,7 @@
     ['open', 'switch console to Preview tab'],
     ['download', 'package project as .zip'],
     ['upload', 'load a project from disk (.zip / build.json / loose files) for adjustment'],
+    ['attach [list|clear]', '📎 attach context files (code/sprites/audio/docs) for generation & adjustments'],
     ['clear', 'wipe the terminal']
   ];
 
@@ -263,6 +264,22 @@
       if (!inp) return 'error: upload input missing';
       inp.click();
       return '→ file picker opened — .zip / build.json / loose game files · parsed on-device';
+    },
+    attach(arg) {
+      if (arg === 'list') {
+        if (!global.Arc || !Arc.Attach || !Arc.Attach.count()) return 'no attachments — use `attach` to open the picker, or 📎 in the Forge';
+        return Arc.Attach.list().map(p => '📎 ' + p).join('\n');
+      }
+      if (arg === 'clear') {
+        if (!global.Arc || !Arc.Attach) return 'error: attacher unavailable';
+        Arc.Attach.clearAll();
+        if (global.Arc.UI && Arc.UI.renderAttachChips) Arc.UI.renderAttachChips();
+        return 'all attachments cleared';
+      }
+      const inp = document.getElementById('attachInput');
+      if (!inp) return 'error: attach input missing';
+      inp.click();
+      return '→ attachment picker opened — context files for generation & adjustments (attach list · attach clear)';
     }
   };
 

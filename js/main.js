@@ -68,6 +68,17 @@
     await sleep(220);
 
     const plan = Arc.Planner.plan(prompt, S.lang, S.persona, S.langs);
+
+    /* 1b · file-attacher conditioning: attached references steer the plan */
+    if (global.Arc && Arc.Attach && Arc.Attach.count()) {
+      const ac = Arc.Attach.genContext();
+      if (ac.title) { plan.title = ac.title; U.logLine('plan', 'attach context → title adopted from attached doc: “' + ac.title + '”'); }
+      if (ac.palette) { plan.palette = ac.palette.slice(); U.logLine('plan', 'attach context → palette pulled from attached stylesheet: ' + ac.palette.join(' ')); }
+      const extra = ac.langs.filter(l => l !== 'html' && l !== 'css' && plan.langs.indexOf(l) < 0);
+      if (extra.length) { plan.langs = plan.langs.concat(extra); U.logLine('plan', 'attach context → stack extended with ' + extra.join(', ') + ' (from attached sources)'); }
+      if (Object.keys(ac.cfg).length) { plan.attachCfg = ac.cfg; U.logLine('plan', 'attach context → ' + Object.keys(ac.cfg).length + ' config value(s) queued for runtime merge'); }
+      if (ac.assets.length) U.logLine('plan', 'attach context → ' + ac.assets.length + ' asset(s) will be embedded into the build tree');
+    }
     S.plan = plan;
     U.logLine('plan', 'genre → ' + plan.genre + ' (' + plan.genreLabel.tagline + ') · view ' + plan.view + ' · seed ' + (plan.seed >>> 0));
     U.logLine('plan', 'language stack → ' + plan.langs.map(x => (S.LANGS.find(l => l.id === x) || {}).label || x).join(' + ') + ' (' + plan.langs.length + ' languages in parallel)');
@@ -115,10 +126,38 @@
       finish(true); return;
     }
     const paths = Object.keys(files);
-    U.logLine('file', 'batch pass → ' + paths.length + ' files emitted in one sweep · ' + (Object.values(files).reduce((n, t) => n + t.length, 0) / 1024).toFixed(1) + ' KB');
+    /* 3b · fold attachment material into the fresh build through the
+          patch stack (assets embedded, CFG merged, GDD logged) —
+          compiler-gated and revertible like any other patch set. */
+    if (global.Arc && Arc.Attach && Arc.Attach.count()) {
+      try {
+        const mat = Arc.Attach.adjustMaterial();
+        const aops = Arc.Attach.buildAttachOps(files, mat);
+        if (aops.length) {
+          files = Object.assign({}, files);
+          aops.forEach(o => { files[o.path] = o.to; });
+          S.addBuild({
+            name: plan.slug, title: plan.title, short: plan.title.split(' ')[0],
+            files, lang: plan.lang, langs: plan.langs.slice(), seed: plan.seed >>> 0,
+            genreLabel: plan.genreLabel.tagline,
+            personaDigest: plan.personaDigest, createdAt: Date.now()
+          });
+          Arc.Patches.apply({ directive: 'attach context → build', ops: [], newTitle: null }, aops);
+          U.logLine('file', 'attachment pass → ' + aops.length + ' injected change(s): ' +
+            [...new Set(aops.map(o => o.path))].join(', '));
+        } else {
+          S.addBuild(build);
+        }
+      } catch (e) { U.logLine('warn', 'attachment injection skipped: ' + e.message); S.addBuild(build); }
+    } else {
+      S.addBuild(build);
+    }
+    const allPaths = Object.keys(files);
+    U.logLine('file', 'batch pass → ' + allPaths.length + ' files emitted in one sweep · ' + (Object.values(files).reduce((n, t) => n + t.length, 0) / 1024).toFixed(1) + ' KB');
     /* group by directory so the log reads like a real emitter */
     const groups = {};
-    paths.forEach(p => { const d = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '(root)'; (groups[d] = groups[d] || []).push(p); });
+    allPaths.forEach(p => { const d = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '(root)'; (groups[d] = groups[d] || []).push(p); });
+
     for (const [dir, list] of Object.entries(groups)) {
       await sleep(60);
       U.logLine('file', 'wrote ' + dir + '/ ← ' + list.length + ' file(s): ' + list.map(p => p.split('/').pop()).join(', '));
@@ -278,12 +317,29 @@
       an.notes.forEach(n => U.logLine(/^⚠/.test(n) ? 'warn' : (isHeal && /^✓/.test(n)) ? 'ok' : 'sys', n));
     }
 
-    if (!an.matched || !an.ops || !an.ops.length) {
-      U.logLine('warn', 'no recognized adjustment in that directive — try feature words (double jump, dash, pause menu…), knobs (faster, fire rate, waves…), colours, or describe the problem ("black screen", "no sound")');
+    /* file-attacher material: attached assets/configs/docs become
+       patch ops that ride along with this adjustment (or stand alone) */
+    let attachOps = [];
+    if (global.Arc && Arc.Attach && Arc.Attach.count()) {
+      try {
+        const mat = Arc.Attach.adjustMaterial();
+        attachOps = Arc.Attach.buildAttachOps(b.files, mat);
+        if (attachOps.length) {
+          U.logLine('plan', 'attach context → ' + attachOps.length + ' injection op(s) from ' +
+            Arc.Attach.count() + ' attached file(s): ' + [...new Set(attachOps.map(o => o.path))].join(', '));
+        }
+      } catch (e) { U.logLine('warn', 'attachment material skipped: ' + e.message); }
+    }
+
+    if ((!an.matched || !an.ops || !an.ops.length) && !attachOps.length) {
+      U.logLine('warn', 'no recognized adjustment in that directive — try feature words (double jump, dash, pause menu…), knobs (faster, fire rate, waves…), colours, or describe the problem ("black screen", "no sound"). Files attached via 📎 are folded in automatically.');
       U.toast('adjustment not recognized', 'err');
       S.setStatus('ready', 'idle');
       if (btn) btn.disabled = false;
       return false;
+    }
+    if (!an.matched && attachOps.length) {
+      U.logLine('sys', 'directive had no keyword match — proceeding with attachment-driven changes only');
     }
 
     if (an.diagnostic) U.logLine('plan', 'self-heal mode · ' + an.ops.length + ' repair op(s) over ' +
@@ -294,7 +350,7 @@
     await sleep(200);
 
     let applied = null;
-    try { applied = Arc.Patches.apply(an); }
+    try { applied = Arc.Patches.apply(an, attachOps); }
     catch (e) { U.logLine('err', 'coder fault during apply: ' + e.message); }
     U.toolLive('coder', false);
     if (!applied || !applied.ok) {
@@ -406,6 +462,68 @@
     const ai = $('#adjustInput'); if (ai) { ai.focus(); ai.placeholder = 'Adjust this uploaded project… e.g. “make it pink, add a pause menu”'; }
   }
 
+  /* ───────────────────────── FILE ATTACHER ─────────────────────────
+     📎 context files (code, sprites, audio, docs) that condition both
+     generation and adjustments. Parsed on-device via Arc.Upload's
+     unpacking; persisted in the state store; rendered as chips. */
+  async function attachFiles(fileList) {
+    if (!global.Arc || !Arc.Attach) { U.toast('attacher unavailable', 'err'); return; }
+    if (!fileList || !fileList.length) return;
+    U.toolLive('files', true);
+    U.logLine('head', '── FILE ATTACHMENT ──', 'SYS');
+    let added = [];
+    try { added = await Arc.Attach.addFiles(fileList, (k, m) => U.logLine(k, m)); }
+    catch (e) { U.logLine('err', 'attach fault: ' + e.message); }
+    U.toolLive('files', false);
+    renderAttachChips();
+    if (!added.length) { U.toast('nothing attached', 'err'); return; }
+    const ac = Arc.Attach.genContext();
+    U.logLine('plan', 'context digest → ' +
+      (ac.langs.length ? 'stack hints [' + ac.langs.join(', ') + '] · ' : '') +
+      (ac.palette ? 'palette ' + ac.palette.join(' ') + ' · ' : '') +
+      (ac.title ? 'title “' + ac.title + '” · ' : '') +
+      (ac.assets.length ? ac.assets.length + ' asset(s)' : 'no assets'));
+    if (S.build && S.plan) {
+      const mat = Arc.Attach.adjustMaterial();
+      const aops = Arc.Attach.buildAttachOps(S.build.files, mat);
+      if (aops.length) {
+        U.logLine('sys', 'active build detected — apply now? press ⚡ Modify or type any adjustment; attachments fold in automatically (' + aops.length + ' op(s) ready)');
+      }
+    } else {
+      U.logLine('sys', 'attachments queued — they will condition the next Generate run');
+    }
+    U.toast(added.length + ' file(s) attached as AI context', 'ok');
+  }
+
+  function renderAttachChips() {
+    const box = $('#attachChips');
+    if (!box || !global.Arc || !Arc.Attach) return;
+    box.innerHTML = '';
+    const paths = Arc.Attach.list();
+    paths.forEach(p => {
+      const chip = document.createElement('span');
+      chip.className = 'attach-chip';
+      const name = p.length > 26 ? p.slice(0, 12) + '…' + p.split('/').pop() : p;
+      chip.innerHTML = '<i>📎</i><b></b><em>×</em>';
+      chip.querySelector('b').textContent = name;
+      chip.title = p + ' — click to detach';
+      chip.querySelector('em').onclick = (ev) => {
+        ev.stopPropagation();
+        Arc.Attach.remove(p);
+        renderAttachChips();
+        U.logLine('sys', 'detached ' + p);
+      };
+      box.appendChild(chip);
+    });
+    if (paths.length) {
+      const clr = document.createElement('button');
+      clr.className = 'attach-clear';
+      clr.textContent = 'clear all';
+      clr.onclick = () => { Arc.Attach.clearAll(); renderAttachChips(); U.logLine('sys', 'all attachments cleared'); };
+      box.appendChild(clr);
+    }
+  }
+
   /* ───────────────────────── WIRING ───────────────────────── */
   function wire() {
     /* tabs */
@@ -442,10 +560,34 @@
     if (upIn) {
       upIn.addEventListener('change', () => { handleUpload(upIn.files); upIn.value = ''; });
     }
+
+    /* file attacher — 📎 context files for generation AND adjustments */
+    renderAttachChips();
+    const atIn = $('#attachInput');
+    const atBtn = $('#btnAttach');
+    if (atBtn) atBtn.onclick = () => { if (atIn) atIn.click(); };
+    if (atIn) {
+      atIn.addEventListener('change', async () => {
+        await attachFiles(atIn.files);
+        atIn.value = '';
+      });
+    }
+    if (atIn) {
+      /* dropping onto the dock specifically attaches instead of importing */
+      const dock = $('#attachDock');
+      ['dragover', 'drop'].forEach(ev => dock.addEventListener(ev, e => {
+        e.stopPropagation(); e.preventDefault();
+        if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files.length) attachFiles(e.dataTransfer.files);
+      }));
+    }
+
     /* safety net: if the app ever renders without the buttons (stale DOM),
        Alt+U still opens the ingestion picker */
     document.addEventListener('keydown', e => {
       if (e.altKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); openPicker(); }
+      if (e.altKey && (e.key === 'a' || e.key === 'A')) {   /* Alt+A opens the file attacher */
+        e.preventDefault(); if (atIn) atIn.click();
+      }
     });
     {
       /* drag & drop anywhere on the app shell also ingests a project */
@@ -569,6 +711,8 @@
   Arc.UI.adjust = adjust;
   Arc.UI.revertPatch = revertPatch;
   Arc.UI.handleUpload = handleUpload;
+  Arc.UI.attachFiles = attachFiles;
+  Arc.UI.renderAttachChips = renderAttachChips;
 
   document.readyState === 'loading' ? addEventListener('DOMContentLoaded', init) : init();
 })();

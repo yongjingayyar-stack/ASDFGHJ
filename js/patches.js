@@ -742,14 +742,23 @@ render = function () {
   }
 
   /* Apply analysed ops to the live build (mutates S.build.files).
-     Returns a snapshot usable by revert(). */
-  function apply(an) {
+     Returns a snapshot usable by revert().
+     extraOps: optional [{path, from, to, why}] merged in (file-attacher
+     material) — deduped per path so chained edits are preserved. */
+  function apply(an, extraOps) {
     const b = S.build;
+    let ops = an.ops.slice();
+    (extraOps || []).forEach(x => {
+      if (!x || !x.path || x.to === undefined) return;
+      const ex = ops.find(o => o.path === x.path);
+      if (ex) { ex.to = x.to; ex.why += ' · ' + x.why; }   // chain on top
+      else ops.push({ path: x.path, from: (b.files[x.path] !== undefined ? b.files[x.path] : null), to: x.to, why: x.why });
+    });
     const backup = {};
-    an.ops.forEach(o => { backup[o.path] = (o.from === null || o.from === undefined) ? null : b.files[o.path]; });
-    an.ops.forEach(o => { b.files[o.path] = o.to; });
+    ops.forEach(o => { backup[o.path] = (o.from === null || o.from === undefined) ? null : b.files[o.path]; });
+    ops.forEach(o => { b.files[o.path] = o.to; });
     b.patched = (b.patched || 0) + 1;
-    b.lastPatch = { at: Date.now(), directive: an.directive, ops: an.ops.map(o => o.why), files: an.files };
+    b.lastPatch = { at: Date.now(), directive: an.directive, ops: ops.map(o => o.why), files: ops.map(o => o.path) };
     if (!b.history) b.history = [];
     b.history.push({ at: Date.now(), directive: an.directive, titleBefore: S.plan.title, backup });
     if (b.history.length > 24) b.history.shift();          // cap snapshots
